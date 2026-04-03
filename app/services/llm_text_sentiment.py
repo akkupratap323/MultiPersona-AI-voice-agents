@@ -57,7 +57,7 @@ class LLMTextSentiment:
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
             },
-            timeout=5.0,
+            timeout=3.0,  # Tight timeout — text sentiment is best-effort, never blocks pipeline
         )
         logger.info(f"LLM Text Sentiment initialized (model: {model}, provider: Groq)")
 
