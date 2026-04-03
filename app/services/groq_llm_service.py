@@ -88,10 +88,9 @@ class GroqLLMService(OpenAILLMService):
             params["messages"] = _merge_consecutive_user_messages(params["messages"])
             merged_count = len(params["messages"])
             if merged_count < original_count:
-                logger.info(
-                    f"GroqLLMService: merged {original_count - merged_count} "
-                    f"consecutive user message(s) "
-                    f"({original_count} → {merged_count} messages)"
+                logger.debug(
+                    f"merged {original_count - merged_count} consecutive user "
+                    f"message(s) before Groq call ({original_count}→{merged_count})"
                 )
 
         return params
