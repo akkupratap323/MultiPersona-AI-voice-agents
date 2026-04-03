@@ -235,10 +235,9 @@ class LightRAGService(BaseRAGService):
         Returns:
             The RAG response string
         """
-        import time
         start_time = time.time()
         try:
-            logger.info(f"🔍 RAG START: Query='{query}' at {start_time}")
+            logger.debug(f"RAG query start: '{query[:80]}'")
             logger.debug(f"LightRAG query: {query}")
 
             # Optimized payload: include all RAG parameters
