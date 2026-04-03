@@ -65,7 +65,7 @@ TEMPLATE_PATTERNS = {
         "priority": 90
     },
     "timeline": {
-        "keywords": ["history", "milestone", "founded", "since", "timeline", "chronological"],
+        "keywords": ["history", "milestone", "founded", "since", "timeline", "chronological", "roadmap", "journey", "began", "started"],
         "template_type": "timeline",
         "description": "Chronological timeline view",
         "priority": 80
@@ -110,7 +110,7 @@ TEMPLATE_PATTERNS = {
         "priority": 75
     },
     "videos": {
-        "keywords": ["video", "watch", "youtube", "vimeo", "clip", "recording"],
+        "keywords": ["video", "watch", "youtube", "vimeo", "clip", "recording", "demo", "webinar", "tutorial"],
         "template_type": "video-gallery",
         "description": "Video gallery display",
         "priority": 70
