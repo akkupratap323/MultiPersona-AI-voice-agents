@@ -1,8 +1,9 @@
-# Production Caddyfile for NesterConversationalBot
-# This file is synced to /opt/nester/Caddyfile during deployment
-# Caddy automatically handles SSL certificates via Let's Encrypt
+# Production Caddyfile — MultiPersona AI Voice Agents
+# Synced to /opt/voice-ai/Caddyfile during deployment
+# Caddy automatically obtains SSL certificates via Let's Encrypt
+# Replace yourdomain.com with your actual domain
 
-ai.nesterlabs.com {
+3.6.92.112.nip.io {
     # API endpoints - proxy to backend (MUST be before catch-all)
     handle /health* {
         reverse_proxy backend:7860
@@ -66,7 +67,5 @@ ai.nesterlabs.com {
     }
 }
 
-# Redirect nip.io domain to production domain
-# The IP will be dynamically determined, but we can add common patterns
-# Note: Caddy will only respond to domains it's configured for
-# The actual nip.io redirect is added dynamically on the server
+# To use a raw IP (no domain), replace yourdomain.com above with:
+# :80 { ... }  — but you won't get HTTPS without a domain

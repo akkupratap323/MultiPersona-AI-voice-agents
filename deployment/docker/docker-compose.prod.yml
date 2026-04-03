@@ -1,27 +1,18 @@
-# Production docker-compose for Lightsail deployment
-# This file is synced to /opt/nester/docker-compose.yml during deployment
+# Production docker-compose — AWS Lightsail
+# Images pulled from GHCR (GitHub Container Registry) — no ECR/IAM needed
 #
-# Environment variables are loaded from .env file on the server
-# The .env file is populated from AWS Secrets Manager
-#
-# CloudWatch Logs: Set CLOUDWATCH_LOG_GROUP and AWS_REGION in .env
-# Example: CLOUDWATCH_LOG_GROUP=/nester-ai/dev
-
-x-logging: &cloudwatch-logging
-  driver: awslogs
-  options:
-    awslogs-group: ${CLOUDWATCH_LOG_GROUP:-/nester-ai/dev}
-    awslogs-region: ${AWS_REGION:-us-west-2}
-    awslogs-create-group: "true"
+# On the server this file lives at: /opt/voice-ai/docker-compose.yml
+# Environment variables are loaded from /opt/voice-ai/.env
 
 services:
   caddy:
     image: caddy:2-alpine
-    container_name: nester-caddy
+    container_name: voice-ai-caddy
     restart: always
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -30,18 +21,11 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - nester-network
-    logging:
-      <<: *cloudwatch-logging
-      options:
-        awslogs-group: ${CLOUDWATCH_LOG_GROUP:-/nester-ai/dev}
-        awslogs-region: ${AWS_REGION:-us-west-2}
-        awslogs-stream: caddy
-        awslogs-create-group: "true"
+      - voice-ai-network
 
   backend:
-    image: ${BACKEND_IMAGE:-196061557238.dkr.ecr.us-west-2.amazonaws.com/nester-ai-dev-backend:latest}
-    container_name: nester-backend
+    image: ${BACKEND_IMAGE:-ghcr.io/akkupratap323/voice-ai-backend:latest}
+    container_name: voice-ai-backend
     restart: always
     expose:
       - "7860"
@@ -55,23 +39,16 @@ services:
       retries: 3
       start_period: 60s
     networks:
-      - nester-network
-    logging:
-      <<: *cloudwatch-logging
-      options:
-        awslogs-group: ${CLOUDWATCH_LOG_GROUP:-/nester-ai/dev}
-        awslogs-region: ${AWS_REGION:-us-west-2}
-        awslogs-stream: backend
-        awslogs-create-group: "true"
+      - voice-ai-network
 
   frontend:
-    image: ${FRONTEND_IMAGE:-196061557238.dkr.ecr.us-west-2.amazonaws.com/nester-ai-dev-frontend:latest}
-    container_name: nester-frontend
+    image: ${FRONTEND_IMAGE:-ghcr.io/akkupratap323/voice-ai-frontend:latest}
+    container_name: voice-ai-frontend
     restart: always
     expose:
       - "80"
     environment:
-      - BACKEND_URL=${PUBLIC_URL:-https://ai.nesterlabs.com}
+      - BACKEND_URL=${PUBLIC_URL:-https://3.6.92.112.nip.io}
     depends_on:
       backend:
         condition: service_healthy
@@ -81,17 +58,10 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - nester-network
-    logging:
-      <<: *cloudwatch-logging
-      options:
-        awslogs-group: ${CLOUDWATCH_LOG_GROUP:-/nester-ai/dev}
-        awslogs-region: ${AWS_REGION:-us-west-2}
-        awslogs-stream: frontend
-        awslogs-create-group: "true"
+      - voice-ai-network
 
 networks:
-  nester-network:
+  voice-ai-network:
     driver: bridge
 
 volumes:
