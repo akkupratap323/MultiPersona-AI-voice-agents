@@ -115,9 +115,9 @@ client/build/
 SYSTEM_ARCHITECTURE.md
 systempromtcontext.txt
 
-# Test and experimental files
-test_*.py
-*_test.py
+# Test and experimental files (only root-level loose test scripts)
+/test_*.py
+/*_test.py
 test_audio_samples/
 =*
 
