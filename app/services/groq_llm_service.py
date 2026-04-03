@@ -117,6 +117,8 @@ class GroqLLMService(OpenAILLMService):
                 "Failed to call a function",
                 "attempted to call tool 'null'",
                 "tool 'null' which was not in request.tools",
+                "tool_use_failed",
+                "function_call_failed",
             ]
             if not any(err in error_str for err in retryable_errors):
                 raise  # Re-raise unrelated errors
