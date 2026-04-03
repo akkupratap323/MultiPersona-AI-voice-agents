@@ -1,0 +1,66 @@
+[
+  {
+    "content": "The current President of the United States is Donald John Trump, who is serving as the 47th President, having taken office on January 20, 2025. He previously served as the 45th President from 2017 to 2021.",
+    "metadata": {
+      "source": "political_info",
+      "category": "government",
+      "topic": "president"
+    }
+  },
+  {
+    "content": "A conversational LLM (Large Language Model) is an artificial intelligence system designed to understand and generate human-like text in a conversational context. These models are trained on vast amounts of text data and can engage in dialogue, answer questions, help with tasks, and maintain context across multiple exchanges. Popular examples include ChatGPT by OpenAI, Claude by Anthropic, and Gemini by Google. LLMs use transformer architecture and are trained using techniques like supervised fine-tuning and reinforcement learning from human feedback (RLHF).",
+    "metadata": {
+      "source": "tech_info",
+      "category": "artificial_intelligence",
+      "topic": "llm"
+    }
+  },
+  {
+    "content": "Artificial Intelligence (AI) refers to the simulation of human intelligence in machines that are programmed to think and learn like humans. AI encompasses various techniques including machine learning, natural language processing, computer vision, and robotics. Machine learning is a subset of AI that enables systems to learn and improve from experience without being explicitly programmed. Deep learning, a subset of machine learning, uses neural networks with many layers to analyze various factors of data.",
+    "metadata": {
+      "source": "tech_info",
+      "category": "artificial_intelligence",
+      "topic": "ai_basics"
+    }
+  },
+  {
+    "content": "Python is a high-level, interpreted programming language known for its simple syntax and readability. Created by Guido van Rossum and first released in 1991, Python is widely used for web development, data science, artificial intelligence, automation, and scientific computing. Its extensive library ecosystem includes NumPy for numerical computing, Pandas for data analysis, TensorFlow and PyTorch for machine learning, Django and Flask for web development, and many more. Python's philosophy emphasizes code readability and simplicity.",
+    "metadata": {
+      "source": "tech_info",
+      "category": "programming",
+      "topic": "python"
+    }
+  },
+  {
+    "content": "Climate change refers to long-term shifts in global temperatures and weather patterns. While climate variations are natural, scientific evidence shows that human activities, particularly the emission of greenhouse gases like CO2 from burning fossil fuels, have been the primary driver of climate change since the mid-20th century. This leads to rising temperatures, melting ice caps, rising sea levels, and changing precipitation patterns. The Paris Agreement aims to limit global warming to 1.5 degrees Celsius above pre-industrial levels.",
+    "metadata": {
+      "source": "science_info",
+      "category": "environment",
+      "topic": "climate_change"
+    }
+  },
+  {
+    "content": "Pinecone is a managed vector database designed for machine learning applications, particularly for similarity search and retrieval-augmented generation (RAG). It stores high-dimensional vectors and enables fast similarity searches at scale. Pinecone is serverless, meaning you don't need to manage infrastructure. It supports metadata filtering, namespaces for data organization, and provides low-latency queries. It integrates well with popular frameworks like LangChain and is commonly used for semantic search, recommendation systems, and AI chatbots.",
+    "metadata": {
+      "source": "tech_info",
+      "category": "databases",
+      "topic": "pinecone"
+    }
+  },
+  {
+    "content": "LangGraph is a library for building stateful, multi-actor applications with large language models (LLMs). Built on top of LangChain, it provides a graph-based approach to orchestrating LLM workflows. LangGraph allows you to define nodes (functions) and edges (transitions) to create complex, cyclical workflows. It supports streaming, persistence, and human-in-the-loop interactions. Common use cases include building chatbots, agents, and RAG systems with complex retrieval and reasoning steps.",
+    "metadata": {
+      "source": "tech_info",
+      "category": "ai_frameworks",
+      "topic": "langgraph"
+    }
+  },
+  {
+    "content": "RAG (Retrieval-Augmented Generation) is an AI framework that combines information retrieval with text generation. Instead of relying solely on the knowledge encoded in a language model's parameters, RAG systems retrieve relevant documents from an external knowledge base and use them to generate more accurate, up-to-date, and grounded responses. The typical RAG pipeline involves: 1) Embedding the query, 2) Searching for similar documents in a vector database, 3) Providing retrieved context to the LLM, 4) Generating a response based on both the query and retrieved context.",
+    "metadata": {
+      "source": "tech_info",
+      "category": "ai_frameworks",
+      "topic": "rag"
+    }
+  }
+]

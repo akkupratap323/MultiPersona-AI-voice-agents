@@ -1,0 +1,114 @@
+[
+  {
+    "content": "Nester Labs is a specialist GenAI and agentic AI studio that helps companies go from idea to prototype to production for LLM-powered products. They have a strong emphasis on design, RAG (Retrieval-Augmented Generation), and complex workflows. Their tagline is about reimagining intelligence.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "company_overview",
+      "topic": "about"
+    }
+  },
+  {
+    "content": "Nester Labs offers end-to-end GenAI product builds, from problem discovery and UX design to model selection, infrastructure, and productionization. They build both MVPs (Minimum Viable Products) and full production-ready products for clients.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "offerings",
+      "topic": "product_builds"
+    }
+  },
+  {
+    "content": "Nester Labs specializes in RAG and Knowledge products. They build custom knowledge interfaces including internal copilots, knowledge bots, and search assistants. Their approach uses retrieval-augmented generation, multi-source data integration, and evaluation loops to ensure quality.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "offerings",
+      "topic": "rag_knowledge"
+    }
+  },
+  {
+    "content": "Nester Labs builds Agentic AI workflows - agents that orchestrate tools, APIs, and data pipelines. Examples include genomics applications and enterprise process automation. Their agentic systems include monitoring and guardrails for reliability and safety.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "offerings",
+      "topic": "agentic_ai"
+    }
+  },
+  {
+    "content": "Nester Labs takes a Discovery and Design first approach. They conduct workshops, information architecture planning, and user journey mapping before writing code. This leverages their strong UX background to ensure products solve real user problems.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "methodology",
+      "topic": "discovery_design"
+    }
+  },
+  {
+    "content": "Nester Labs is tech-agnostic but AI-native. They are not tied to one vendor and can use OpenAI, Anthropic, open-source models, various vector databases, and different cloud providers based on client constraints and requirements.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "methodology",
+      "topic": "tech_approach"
+    }
+  },
+  {
+    "content": "Nester Labs has a product plus platform mindset. They build systems rather than one-off chatbots. This includes AI layers on top of existing products and data, creating comprehensive solutions rather than isolated features.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "methodology",
+      "topic": "systems_thinking"
+    }
+  },
+  {
+    "content": "Nester Labs targets problems like turning large, messy enterprise data into searchable, conversational knowledge tools and internal copilots. They help organizations make their data accessible and actionable through AI interfaces.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "use_cases",
+      "topic": "enterprise_data"
+    }
+  },
+  {
+    "content": "Nester Labs builds domain-specific AI agents for genomics pipelines, technical support, and operational workflows. These agents can call tools, check constraints, and respond intelligently within specific domains.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "use_cases",
+      "topic": "domain_agents"
+    }
+  },
+  {
+    "content": "Nester Labs helps companies that have played with AI demos but need real, reliable production systems. They provide proper evaluations, monitoring, and governance to turn prototypes into production-ready applications.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "use_cases",
+      "topic": "production_systems"
+    }
+  },
+  {
+    "content": "Nester Labs frames AI as augmenting human intelligence rather than replacing it. They focus on collaboration between human experts and AI systems, emphasizing that AI should enhance human capabilities.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "philosophy",
+      "topic": "human_ai_collaboration"
+    }
+  },
+  {
+    "content": "Nester Labs emphasizes long-term partnerships with clients. They stay involved post-MVP to iterate on models, UX, and infrastructure as products scale, rather than just delivering and leaving.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "philosophy",
+      "topic": "partnerships"
+    }
+  },
+  {
+    "content": "Nester Labs values engineers who can think in systems - understanding pipelines, agents, and UX holistically rather than just isolated models. Their internal Nester AI experiments include work on Pipecat voice agents, RAG systems, and LangGraph implementations.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "engineering",
+      "topic": "skills_valued"
+    }
+  },
+  {
+    "content": "The Nester Conversational Bot is a voice assistant built with Pipecat framework, featuring speech-to-text with Deepgram, text-to-speech with ElevenLabs, OpenAI LLM integration, and a RAG system using Pinecone vector database with LangGraph workflows.",
+    "metadata": {
+      "source": "nester_labs",
+      "category": "products",
+      "topic": "voice_assistant"
+    }
+  }
+]

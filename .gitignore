@@ -94,7 +94,6 @@ DeploementAwsLightSail.txt
 LightsailDefaultKey*
 
 # Docker data volumes
-data/
 caddy_data/
 caddy_config/
 
@@ -142,3 +141,4 @@ NesterConversationalBot/
 !client/index.html
 !client/*.html
 .aider*
+deployment/docker/server.env
