@@ -49,9 +49,11 @@ torch.set_num_interop_threads(1)  # Reduce inter-op parallelism overhead
 if hasattr(torch.backends, 'mkldnn'):
     torch.backends.mkldnn.enabled = True
 
-logger.info(f"🔧 PyTorch CPU optimizations: threads={torch.get_num_threads()}, "
-            f"interop_threads={torch.get_num_interop_threads()}, "
-            f"mkldnn={getattr(torch.backends, 'mkldnn', None) and torch.backends.mkldnn.enabled}")
+logger.debug(
+    f"PyTorch CPU config: threads={torch.get_num_threads()}, "
+    f"interop={torch.get_num_interop_threads()}, "
+    f"mkldnn={getattr(torch.backends, 'mkldnn', None) and torch.backends.mkldnn.enabled}"
+)
 
 # Lazy load model
 _model = None
@@ -90,14 +92,14 @@ def get_msp_model():
     global _model, _processor, _model_loading, _model_quantized
 
     if _model is not None and _processor is not None:
-        logger.debug("[EMOTION-DIAG] get_msp_model: returning cached model")
+        logger.debug("MSP model cache hit")
         return _model, _processor
 
     if _model_loading:
         logger.error(
-            "[EMOTION-DIAG] get_msp_model: _model_loading=True but model is None! "
-            "This means the loading flag was not reset after a previous load. "
-            "This is a critical bug that disables emotion detection."
+            "get_msp_model: _model_loading=True but model is None — "
+            "loading flag was not reset after a previous failed load. "
+            "Emotion detection is disabled for this session."
         )
         return None, None
 
