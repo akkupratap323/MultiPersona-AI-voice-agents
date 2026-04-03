@@ -1,0 +1,80 @@
+{
+  "agent": {
+    "metrics_collection_interval": 60,
+    "run_as_user": "root"
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/lib/docker/containers/*/*-json.log",
+            "log_group_name": "/lightsail/nester-docker",
+            "log_stream_name": "{instance_id}-{container_name}",
+            "timezone": "UTC",
+            "multi_line_start_pattern": "^\\{",
+            "encoding": "utf-8"
+          },
+          {
+            "file_path": "/var/log/syslog",
+            "log_group_name": "/lightsail/nester-system",
+            "log_stream_name": "{instance_id}",
+            "timezone": "UTC"
+          }
+        ]
+      }
+    }
+  },
+  "metrics": {
+    "namespace": "NesterVoiceAI",
+    "metrics_collected": {
+      "cpu": {
+        "measurement": [
+          {
+            "name": "cpu_usage_idle",
+            "rename": "CPU_USAGE_IDLE",
+            "unit": "Percent"
+          },
+          {
+            "name": "cpu_usage_iowait",
+            "rename": "CPU_USAGE_IOWAIT",
+            "unit": "Percent"
+          },
+          {
+            "name": "cpu_usage_user",
+            "rename": "CPU_USAGE_USER",
+            "unit": "Percent"
+          },
+          {
+            "name": "cpu_usage_system",
+            "rename": "CPU_USAGE_SYSTEM",
+            "unit": "Percent"
+          }
+        ],
+        "totalcpu": false
+      },
+      "disk": {
+        "measurement": [
+          {
+            "name": "used_percent",
+            "rename": "DISK_USED_PERCENT",
+            "unit": "Percent"
+          }
+        ],
+        "resources": [
+          "*"
+        ]
+      },
+      "mem": {
+        "measurement": [
+          {
+            "name": "mem_used_percent",
+            "rename": "MEM_USED_PERCENT",
+            "unit": "Percent"
+          }
+        ]
+      }
+    }
+  }
+}
+

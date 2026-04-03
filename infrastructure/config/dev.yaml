@@ -1,0 +1,57 @@
+# Dev environment configuration
+# Overrides base.yaml values
+
+# Environment identifier
+environment: "dev"
+
+# AWS Configuration
+aws:
+  region: "us-west-2"
+
+# Lightsail instance for dev
+lightsail:
+  instance:
+    bundle_id: "medium_3_0"  # 4GB RAM, 2 vCPUs
+    blueprint_id: "amazon_linux_2023"
+    availability_zone_suffix: "a"
+
+  networking:
+    ports:
+      - port: 22
+        protocol: "tcp"
+        cidrs: []  # Restrict SSH - add your IPs here
+      - port: 80
+        protocol: "tcp"
+        cidrs: ["0.0.0.0/0"]
+      - port: 443
+        protocol: "tcp"
+        cidrs: ["0.0.0.0/0"]
+      - port: 7860
+        protocol: "tcp"
+        cidrs: ["0.0.0.0/0"]
+      - port: 8765
+        protocol: "tcp"
+        cidrs: ["0.0.0.0/0"]
+
+# Application
+application:
+  server:
+    log_level: "DEBUG"  # More verbose logging in dev
+
+  docker:
+    image_tag: "latest"  # Use latest-tagged images
+
+  domain:
+    name: "ai.nesterlabs.com"
+    use_https: true
+
+# Monitoring
+monitoring:
+  log_retention_days: 7
+  alarms:
+    cpu_threshold: 90
+    memory_threshold: 90
+
+# Additional tags
+tags:
+  Environment: "dev"

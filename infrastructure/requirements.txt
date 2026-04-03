@@ -1,0 +1,11 @@
+# AWS CDK
+aws-cdk-lib>=2.170.0
+constructs>=10.3.0
+
+# Configuration
+pyyaml>=6.0.1
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Development
+pytest>=7.4.0

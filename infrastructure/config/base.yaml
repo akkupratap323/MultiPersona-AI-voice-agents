@@ -1,0 +1,141 @@
+# Base configuration for NesterAI Infrastructure
+# Environment-specific configs override these values
+
+# Project metadata
+project:
+  name: "nester-ai"
+  description: "NesterAI Voice Assistant Infrastructure"
+
+# AWS Account Configuration
+aws:
+  region: "us-west-2"  # Oregon - primary US West region for Lightsail
+  # account_id is typically set via CDK_DEFAULT_ACCOUNT or explicitly
+  # Supported Lightsail regions: us-east-1, us-east-2, us-west-1, us-west-2,
+  # eu-west-1, eu-west-2, eu-west-3, eu-central-1, ca-central-1, ap-south-1,
+  # ap-southeast-1, ap-southeast-2, ap-northeast-1, ap-northeast-2, eu-north-1
+
+# Lightsail Instance Configuration
+lightsail:
+  instance:
+    # Available bundles: nano, micro, small, medium, large, xlarge, 2xlarge
+    # See: https://aws.amazon.com/lightsail/pricing/
+    bundle_id: "medium_3_0"  # 4GB RAM, 2 vCPUs, 80GB SSD
+    # Blueprint IDs for container-optimized or general purpose
+    # amazon_linux_2023, ubuntu_22_04, debian_12
+    blueprint_id: "amazon_linux_2023"
+    availability_zone_suffix: "a"  # Will be combined with region (e.g., ap-south-1a)
+
+  # Static IP for consistent endpoint
+  static_ip:
+    enabled: true
+
+  # Firewall / Networking
+  networking:
+    ports:
+      - port: 22
+        protocol: "tcp"
+        cidrs: []  # Empty means restricted, populate with your IPs
+      - port: 80
+        protocol: "tcp"
+        cidrs: ["0.0.0.0/0"]
+      - port: 443
+        protocol: "tcp"
+        cidrs: ["0.0.0.0/0"]
+      - port: 7860
+        protocol: "tcp"
+        cidrs: ["0.0.0.0/0"]  # FastAPI backend
+      - port: 8765
+        protocol: "tcp"
+        cidrs: ["0.0.0.0/0"]  # WebSocket server
+
+# Secrets Manager Configuration
+secrets:
+  # Secret name prefix - full name will be {prefix}/{environment}/api-keys
+  name_prefix: "nester"
+
+  # API Keys to manage (values are placeholders - update after deployment)
+  # These create the secret structure, actual values set via AWS Console/CLI
+  api_keys:
+    # Required
+    - name: "DEEPGRAM_API_KEY"
+      description: "Deepgram API key for STT/TTS"
+      required: true
+    - name: "GOOGLE_API_KEY"
+      description: "Google API key for Gemini LLM"
+      required: true
+
+    # Optional but commonly used
+    - name: "OPENAI_API_KEY"
+      description: "OpenAI API key (alternative LLM)"
+      required: false
+    - name: "RESEMBLE_API_KEY"
+      description: "Resemble AI API key for TTS with emotion"
+      required: false
+    - name: "RESEMBLE_VOICE_UUID"
+      description: "Resemble AI Voice UUID"
+      required: false
+    - name: "LIGHTRAG_API_KEY"
+      description: "LightRAG API key"
+      required: false
+    - name: "LIGHTRAG_BASE_URL"
+      description: "LightRAG base URL"
+      required: false
+    - name: "PINECONE_API_KEY"
+      description: "Pinecone API key for vector DB"
+      required: false
+    - name: "PINECONE_INDEX"
+      description: "Pinecone index name"
+      required: false
+    - name: "ELEVENLABS_API_KEY"
+      description: "ElevenLabs API key for TTS"
+      required: false
+    - name: "ELEVENLABS_VOICE_ID"
+      description: "ElevenLabs Voice ID"
+      required: false
+    - name: "HUME_API_KEY"
+      description: "Hume AI API key for emotion detection"
+      required: false
+    - name: "GROQ_API_KEY"
+      description: "Groq API key for fast LLM"
+      required: false
+    - name: "AIC_LICENSE_KEY"
+      description: "AIC License key"
+      required: false
+    - name: "KOALA_ACCESS_KEY"
+      description: "Picovoice Koala access key for noise suppression"
+      required: false
+
+# Application Configuration (passed to instance via user data)
+application:
+  # Server settings
+  server:
+    fastapi_host: "0.0.0.0"
+    fastapi_port: 7860
+    websocket_host: "0.0.0.0"
+    websocket_port: 8765
+    session_timeout: 180
+    log_level: "INFO"
+
+  # Container images - ECR repositories created by CDK
+  # Image URIs are constructed as: {account}.dkr.ecr.{region}.amazonaws.com/{prefix}-backend:tag
+  docker:
+    image_tag: "latest"
+    # ECR is used by default - repositories created by CDK stack
+
+  # Domain configuration
+  domain:
+    name: ""  # Set in environment-specific config
+    use_https: true
+
+# CloudWatch / Monitoring
+monitoring:
+  enabled: true
+  log_retention_days: 30
+  alarms:
+    cpu_threshold: 80
+    memory_threshold: 80
+
+# Tags applied to all resources
+tags:
+  Project: "NesterAI"
+  ManagedBy: "CDK"
