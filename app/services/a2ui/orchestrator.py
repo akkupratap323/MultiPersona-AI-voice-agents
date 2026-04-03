@@ -122,7 +122,7 @@ TEMPLATE_PATTERNS = {
         "priority": 70
     },
     "faq": {
-        "keywords": ["faq", "frequently asked", "questions", "q&a", "common questions"],
+        "keywords": ["faq", "frequently asked", "questions", "q&a", "common questions", "what do people ask", "how do i", "can i"],
         "template_type": "faq-accordion",
         "description": "FAQ accordion",
         "priority": 80
