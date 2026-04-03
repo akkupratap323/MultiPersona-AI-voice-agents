@@ -1,7 +1,6 @@
-# Backend Dockerfile for NesterConversationalBot
-# Python FastAPI + Pipecat Voice Assistant
-# OPTIMIZED: Uses CPU-only PyTorch (~800MB vs ~2.5GB with CUDA)
-# Deployed to 4GB Lightsail instance
+# MultiPersona AI Voice Agents — Backend Dockerfile
+# Python FastAPI + Pipecat voice pipeline
+# Uses CPU-only PyTorch (~800MB vs ~2.5GB with CUDA) to fit 4GB Lightsail RAM
 
 FROM python:3.11-slim
 
@@ -45,6 +44,7 @@ EXPOSE 7860
 # Health check (60s start period for LLM initialization)
 HEALTHCHECK --interval=30s --timeout=15s --start-period=60s --retries=5 \
     CMD curl -f http://localhost:7860/health || exit 1
+# Note: 60s start-period covers MSP-PODCAST model load time on first boot
 
 # Run the application
 CMD ["python", "-m", "app.main"]
