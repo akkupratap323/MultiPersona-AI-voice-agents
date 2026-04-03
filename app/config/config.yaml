@@ -233,15 +233,16 @@ personas:
     receptionist:
       name: "Brooke"
       role: "Receptionist"
-      description: "Confident and conversational front-desk assistant"
+      description: "Warm and professional front-desk assistant — the first voice visitors hear"
       avatar: "/personas/receptionist.webp"
       voice_id: "${CARTESIA_VOICE_ID}"
+      language: "en"
       system_prompt_override: ""  # Empty = use default system_prompt from conversation config
       greetings:
         - "Hi, I'm Brooke, your voice assistant. How can I help you today? "
         - "Hey there! I'm Brooke, here to help. What can I do for you? "
         - "Hello! I'm Brooke, your assistant. What would you like to explore? "
-      tags: ["English", "Female", "Professional"]
+      tags: ["English", "Female", "Professional", "Receptionist"]
 
     customer_support:
       name: "Blake"
