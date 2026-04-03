@@ -1,0 +1,274 @@
+# Deploy to EC2 Graviton (ARM64)
+# Parallel test deployment for benchmarking emotion detection on ARM architecture
+#
+# Triggers on push to graviton-test branch or manual dispatch
+#
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID     - AWS credentials with ECR push permissions
+#   AWS_SECRET_ACCESS_KEY - AWS credentials
+#   AWS_ACCOUNT_ID        - Your AWS account ID (e.g., 196061557238)
+#   GRAVITON_SSH_KEY      - Private SSH key for EC2 Graviton instance
+#   GRAVITON_HOST         - Elastic IP of Graviton instance
+
+name: Deploy to AWS Graviton
+
+on:
+  push:
+    branches: [feat/cartesia-tts]
+    paths:
+      - 'app/**'
+      - 'client/**'
+      - 'deployment/docker/**'
+      - '.github/workflows/deploy-graviton.yml'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force rebuild all images'
+        required: false
+        default: 'false'
+        type: boolean
+      skip_deploy:
+        description: 'Skip deployment (build only)'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+  ENVIRONMENT: graviton-test
+  PUBLIC_URL: ${{ vars.GRAVITON_PUBLIC_URL || '' }}
+
+jobs:
+  # Detect what changed to only build necessary images
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      deployment: ${{ steps.changes.outputs.deployment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'app/**'
+              - 'deployment/docker/Dockerfile'
+              - 'requirements.txt'
+              - 'pyproject.toml'
+            frontend:
+              - 'client/**'
+            deployment:
+              - 'deployment/docker/docker-compose.graviton.yml'
+              - 'deployment/docker/Caddyfile.graviton'
+
+  # Build and push backend image (ARM64)
+  build-backend:
+    name: Build Backend (ARM64)
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || github.event.inputs.force_build == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04-arm  # Native ARM64 runner - no QEMU emulation needed
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend (ARM64)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deployment/docker/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/nester-ai-graviton-test-backend:latest
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/nester-ai-graviton-test-backend:${{ github.sha }}
+          build-args: |
+            CACHEBUST=${{ github.sha }}
+          cache-from: type=gha,scope=graviton-backend
+          cache-to: type=gha,scope=graviton-backend,mode=max
+
+  # Build and push frontend image (ARM64)
+  build-frontend:
+    name: Build Frontend (ARM64)
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || github.event.inputs.force_build == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04-arm  # Native ARM64 runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push frontend (ARM64)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          file: ./client/Dockerfile
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/nester-ai-graviton-test-frontend:latest
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/nester-ai-graviton-test-frontend:${{ github.sha }}
+          build-args: |
+            CACHEBUST=${{ github.sha }}
+          cache-from: type=gha,scope=graviton-frontend
+          cache-to: type=gha,scope=graviton-frontend,mode=max
+
+  # Deploy to Graviton EC2 instance
+  deploy:
+    name: Deploy to Graviton EC2
+    needs: [changes, build-backend, build-frontend]
+    if: |
+      always() &&
+      github.event.inputs.skip_deploy != 'true' &&
+      (needs.build-backend.result == 'success' || needs.build-backend.result == 'skipped') &&
+      (needs.build-frontend.result == 'success' || needs.build-frontend.result == 'skipped') &&
+      (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success' || needs.changes.outputs.deployment == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy deployment files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.GRAVITON_HOST }}
+          username: ec2-user
+          key: ${{ secrets.GRAVITON_SSH_KEY }}
+          source: "deployment/docker/docker-compose.graviton.yml,deployment/docker/Caddyfile.graviton"
+          target: "/tmp/deploy"
+          strip_components: 2
+
+      - name: Deploy to Graviton instance
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.GRAVITON_HOST }}
+          username: ec2-user
+          key: ${{ secrets.GRAVITON_SSH_KEY }}
+          script: |
+            set -e
+            echo "=== Starting Graviton deployment ==="
+            cd /opt/nester
+
+            # Update docker-compose.yml from repo
+            if [ -f /tmp/deploy/docker-compose.graviton.yml ]; then
+              echo "Updating docker-compose.yml..."
+              sudo cp /tmp/deploy/docker-compose.graviton.yml /opt/nester/docker-compose.yml
+            fi
+
+            # Update Caddyfile from repo (if exists)
+            if [ -f /tmp/deploy/Caddyfile.graviton ]; then
+              echo "Updating Caddyfile..."
+              sudo cp /tmp/deploy/Caddyfile.graviton /opt/nester/Caddyfile
+            fi
+
+            # Clean up
+            rm -rf /tmp/deploy
+
+            # Remove old Docker images, containers, and volumes to free disk space
+            echo "=== Cleaning up old Docker resources ==="
+            docker system prune -a -f --volumes || true
+
+            # Refresh environment (best-effort, don't fail deploy if this errors)
+            ./deploy.sh || echo "WARNING: deploy.sh had errors, continuing with explicit pull/restart"
+
+            # Explicit ECR login, pull, and restart (ensures new images are always used)
+            echo "=== ECR login ==="
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com
+
+            echo "=== Pulling latest images ==="
+            docker compose pull
+
+            echo "=== Restarting services ==="
+            docker compose up -d --force-recreate || true
+
+            echo "=== Waiting for backend to become healthy (up to 150s) ==="
+            for i in $(seq 1 15); do
+              sleep 10
+              STATUS=$(docker inspect --format='{{.State.Health.Status}}' nester-backend 2>/dev/null || echo "missing")
+              echo "[$((i*10))s] backend health: $STATUS"
+              if [ "$STATUS" = "healthy" ]; then
+                echo "Backend is healthy!"
+                break
+              fi
+              if [ "$STATUS" = "unhealthy" ]; then
+                echo "=== BACKEND CRASHED - container logs ==="
+                docker logs --tail 100 nester-backend
+                echo "=== docker inspect health ==="
+                docker inspect nester-backend | python3 -c "import sys,json; h=json.load(sys.stdin)[0]['State']['Health']; [print(l['Output']) for l in h.get('Log',[])]"
+                exit 1
+              fi
+            done
+
+            docker compose ps
+            echo "=== Graviton deployment complete ==="
+
+  # Verify deployment
+  # Health check is mandatory - workflow fails if this fails
+  verify:
+    name: Health Check
+    needs: [deploy]
+    if: always() && needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for services to stabilize
+        run: sleep 30
+
+      - name: Backend health check
+        run: |
+          echo "Checking backend at ${{ env.PUBLIC_URL }}/health..."
+          curl -f --retry 5 --retry-delay 10 --retry-all-errors ${{ env.PUBLIC_URL }}/health
+          echo "Backend health check passed!"
+
+      - name: Frontend health check
+        run: |
+          echo "Checking frontend at ${{ env.PUBLIC_URL }}..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --retry 5 --retry-delay 10 ${{ env.PUBLIC_URL }}/)
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "Frontend returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+          echo "Frontend health check passed!"
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "## Graviton Deployment Health Check Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend: ${{ env.PUBLIC_URL }}/health ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: ${{ env.PUBLIC_URL }}/ ✅" >> $GITHUB_STEP_SUMMARY
+          echo "- Architecture: ARM64 (Graviton)" >> $GITHUB_STEP_SUMMARY
+
+  # Notify on failure
+  notify:
+    name: Notify on Failure
+    needs: [build-backend, build-frontend, deploy, verify]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure notification
+        run: |
+          echo "::error::Graviton deployment failed! Check the workflow logs for details."

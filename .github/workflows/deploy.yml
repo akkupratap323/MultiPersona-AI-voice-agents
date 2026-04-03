@@ -1,0 +1,478 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  AWS_REGION: ap-south-1
+  IMAGE_NAME: nesteraibot
+
+jobs:
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tags }}
+      backend_image: ${{ steps.meta.outputs.backend_image }}
+      frontend_image: ${{ steps.meta.outputs.frontend_image }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-backend
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-frontend
+          tags: |
+            type=sha,prefix=,format=short
+            type=raw,value=latest
+
+      - name: Build and push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./deployment/docker/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-backend:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          file: ./client/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Set image outputs
+        id: image_outputs
+        run: |
+          echo "backend_image=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-backend:${{ github.sha }}" >> $GITHUB_OUTPUT
+          echo "frontend_image=${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}-frontend:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+  deploy:
+    name: Deploy to Lightsail
+    runs-on: ubuntu-latest
+    needs: build
+    environment:
+      name: production
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Deploy to Lightsail
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          AWS_REGION: ${{ env.AWS_REGION }}
+          IMAGE_TAG: ${{ github.sha }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+          GHCR_USER: ${{ github.repository_owner }}
+          PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
+          # Pass all required secrets for .env file
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          RESEMBLE_API_KEY: ${{ secrets.RESEMBLE_API_KEY }}
+          RESEMBLE_VOICE_UUID: ${{ secrets.RESEMBLE_VOICE_UUID }}
+          LIGHTRAG_API_KEY: ${{ secrets.LIGHTRAG_API_KEY }}
+          LIGHTRAG_BASE_URL: ${{ secrets.LIGHTRAG_BASE_URL }}
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          envs: AWS_REGION,IMAGE_TAG,GHCR_TOKEN,GHCR_USER,PUBLIC_URL,DEEPGRAM_API_KEY,GOOGLE_API_KEY,GROQ_API_KEY,RESEMBLE_API_KEY,RESEMBLE_VOICE_UUID,LIGHTRAG_API_KEY,LIGHTRAG_BASE_URL
+          script: |
+            set -e
+            
+            echo "🚀 NesterAIBot Deployment Starting..."
+            echo "📦 Commit SHA: $IMAGE_TAG"
+            
+            # === STEP 0: SETUP SWAP FOR 4GB RAM INSTANCE ===
+            setup_swap() {
+              if [ -f /swapfile ]; then
+                echo "✅ Swap already exists"
+                return 0
+              fi
+              
+              echo "📦 Creating 2GB swap file for burst handling..."
+              sudo fallocate -l 2G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=2048
+              sudo chmod 600 /swapfile
+              sudo mkswap /swapfile
+              sudo swapon /swapfile
+              
+              # Make permanent
+              if ! grep -q "/swapfile" /etc/fstab; then
+                echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+              fi
+              
+              echo "✅ Swap configured: $(free -h | grep Swap)"
+            }
+            
+            # Setup swap first (prevents OOM during model loading)
+            setup_swap
+            
+            # === STEP 1: INSTALL DOCKER IF NOT PRESENT ===
+            install_docker() {
+              echo "📦 Docker not found. Installing Docker..."
+              
+              if [ -f /etc/os-release ]; then
+                . /etc/os-release
+                OS=$ID
+              else
+                OS=$(uname -s)
+              fi
+              
+              case "$OS" in
+                amzn|amazon)
+                  echo "Installing Docker on Amazon Linux..."
+                  sudo yum update -y
+                  sudo yum install -y docker
+                  sudo systemctl start docker
+                  sudo systemctl enable docker
+                  sudo usermod -aG docker $USER
+                  ;;
+                ubuntu|debian)
+                  echo "Installing Docker on Ubuntu/Debian..."
+                  sudo apt-get update
+                  sudo apt-get install -y docker.io
+                  sudo systemctl start docker
+                  sudo systemctl enable docker
+                  sudo usermod -aG docker $USER
+                  ;;
+                *)
+                  echo "Installing Docker using get.docker.com..."
+                  curl -fsSL https://get.docker.com | sudo sh
+                  sudo systemctl start docker
+                  sudo systemctl enable docker
+                  sudo usermod -aG docker $USER
+                  ;;
+              esac
+            }
+            
+            install_compose() {
+              echo "📦 Installing docker-compose..."
+              sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+              sudo chmod +x /usr/local/bin/docker-compose
+              sudo ln -sf /usr/local/bin/docker-compose /usr/bin/docker-compose 2>/dev/null || true
+            }
+            
+            # Check and install Docker
+            if ! command -v docker &> /dev/null; then
+              install_docker
+            fi
+            
+            # Check and install docker-compose
+            if ! command -v docker-compose &> /dev/null; then
+              install_compose
+            fi
+            
+            # Use sudo for docker if user not in docker group
+            if groups | grep -q docker; then
+              D="docker"
+              DC="docker-compose"
+            else
+              D="sudo docker"
+              DC="sudo docker-compose"
+            fi
+            
+            echo "✅ Docker ready: $($D --version)"
+            echo "✅ Docker Compose ready: $($DC --version)"
+            
+            # === CREATE WORKING DIRECTORY ===
+            mkdir -p ~/nester-bot
+            cd ~/nester-bot
+            echo "📁 Working directory: $(pwd)"
+            
+            # === PORT 80 CLEANUP ===
+            echo "🧹 Cleaning port 80 conflicts..."
+            sudo fuser -k 80/tcp 2>/dev/null || true
+            $D ps -q --filter "publish=80" 2>/dev/null | xargs -r $D rm -f 2>/dev/null || true
+            $DC -f docker-compose.https.yml down --remove-orphans 2>/dev/null || true
+            sleep 2
+            
+            # === LOGIN TO GHCR ===
+            echo "🔑 Logging into GHCR..."
+            echo "$GHCR_TOKEN" | $D login ghcr.io -u "$GHCR_USER" --password-stdin || {
+              echo "❌ Failed to login to GHCR"
+              exit 1
+            }
+            echo "✅ GHCR login successful"
+            
+            # === CREATE .ENV FROM GITHUB SECRETS ===
+            echo "🔐 Creating .env file from GitHub secrets..."
+            cat > .env << EOF
+            DEEPGRAM_API_KEY=$DEEPGRAM_API_KEY
+            GOOGLE_API_KEY=$GOOGLE_API_KEY
+            GROQ_API_KEY=$GROQ_API_KEY
+            RESEMBLE_API_KEY=$RESEMBLE_API_KEY
+            RESEMBLE_VOICE_UUID=${RESEMBLE_VOICE_UUID:-fb2d2858}
+            LIGHTRAG_API_KEY=$LIGHTRAG_API_KEY
+            LIGHTRAG_BASE_URL=$LIGHTRAG_BASE_URL
+            PUBLIC_URL=$PUBLIC_URL
+            WEBSOCKET_SERVER=fast_api
+            FASTAPI_HOST=0.0.0.0
+            FASTAPI_PORT=7860
+            EOF
+            
+            # Remove leading whitespace from heredoc
+            sed -i 's/^[[:space:]]*//' .env
+            chmod 600 .env
+            
+            # Verify critical secrets are present
+            if [ -z "$DEEPGRAM_API_KEY" ] || [ -z "$GOOGLE_API_KEY" ]; then
+              echo "⚠️  Warning: Some API keys may be missing"
+              echo "   DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:+SET}"
+              echo "   GOOGLE_API_KEY: ${GOOGLE_API_KEY:+SET}"
+              echo "   GROQ_API_KEY: ${GROQ_API_KEY:+SET}"
+              echo "   RESEMBLE_API_KEY: ${RESEMBLE_API_KEY:+SET}"
+            fi
+            echo "✅ .env file created"
+            
+            # === CREATE CADDYFILE ===
+            echo "📝 Creating Caddyfile..."
+            DOMAIN="${PUBLIC_URL:-localhost}"
+            DOMAIN=$(echo "$DOMAIN" | sed 's|https://||' | sed 's|http://||' | sed 's|/$||')
+            
+            cat > Caddyfile << EOF
+            {
+              admin off
+            }
+            
+            $DOMAIN {
+              reverse_proxy /ws nester-backend:7860
+              reverse_proxy /connect nester-backend:7860
+              reverse_proxy /health nester-backend:7860
+              reverse_proxy /status nester-backend:7860
+              reverse_proxy /api/* nester-backend:7860
+              reverse_proxy nester-frontend:80
+            }
+            EOF
+            echo "✅ Caddyfile created for domain: $DOMAIN (HTTPS enabled)"
+            
+            # === CREATE DOCKER COMPOSE FILE ===
+            echo "📝 Creating docker-compose.https.yml..."
+            cat > docker-compose.https.yml << EOF
+            services:
+              caddy:
+                image: caddy:2-alpine
+                container_name: nester-caddy
+                restart: always
+                ports:
+                  - "80:80"
+                  - "443:443"
+                volumes:
+                  - ./Caddyfile:/etc/caddy/Caddyfile:ro
+                  - caddy_data:/data
+                  - caddy_config:/config
+                networks:
+                  - nester-network
+                depends_on:
+                  backend:
+                    condition: service_healthy
+            
+              backend:
+                image: ghcr.io/nesterlabs-ai/nesteraibot-backend:$IMAGE_TAG
+                container_name: nester-backend
+                restart: always
+                env_file:
+                  - .env
+                environment:
+                  - PUBLIC_URL=$PUBLIC_URL
+                  - FASTAPI_HOST=0.0.0.0
+                  - FASTAPI_PORT=7860
+                  - SESSION_TIMEOUT=180
+                  - LOG_LEVEL=INFO
+                expose:
+                  - "7860"
+                healthcheck:
+                  test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+                  interval: 30s
+                  timeout: 15s
+                  retries: 5
+                  start_period: 120s
+                networks:
+                  - nester-network
+            
+              frontend:
+                image: ghcr.io/nesterlabs-ai/nesteraibot-frontend:$IMAGE_TAG
+                container_name: nester-frontend
+                restart: always
+                environment:
+                  - BACKEND_URL=$PUBLIC_URL
+                expose:
+                  - "80"
+                networks:
+                  - nester-network
+                depends_on:
+                  backend:
+                    condition: service_healthy
+            
+            networks:
+              nester-network:
+                driver: bridge
+            
+            volumes:
+              caddy_data:
+              caddy_config:
+            EOF
+            
+            echo "📋 Verifying image tags:"
+            grep "image:" docker-compose.https.yml | grep -E "backend|frontend"
+            
+            # === PURGE OLD LOCAL IMAGES ===
+            echo "🧹 Purging old local images..."
+            $D images "nester*" -q 2>/dev/null | sort -u | xargs -r $D rmi -f 2>/dev/null || true
+            $D images "nester-bot*" -q 2>/dev/null | sort -u | xargs -r $D rmi -f 2>/dev/null || true
+            
+            # === PULL IMAGES ===
+            echo "📥 Pulling images from GHCR..."
+            $DC -f docker-compose.https.yml pull || {
+              echo "⚠️  Pull with SHA failed, trying latest..."
+              sed -i "s|:$IMAGE_TAG|:latest|g" docker-compose.https.yml
+              $DC -f docker-compose.https.yml pull || {
+                echo "❌ Failed to pull images"
+                exit 1
+              }
+            }
+            echo "✅ Images pulled successfully"
+            
+            # === DEPLOY ===
+            echo "🚀 Deploying containers..."
+            $DC -f docker-compose.https.yml down --remove-orphans 2>/dev/null || true
+            $DC -f docker-compose.https.yml up -d --force-recreate --remove-orphans || {
+              echo "❌ Failed to start containers"
+              $D ps
+              exit 1
+            }
+            
+            echo "⏳ Waiting for services to start (30s)..."
+            sleep 30
+            
+            # === VERIFY ===
+            echo "🔍 Verifying deployment..."
+            $D ps --format "table {{.Names}}\t{{.Status}}\t{{.Image}}"
+            
+            # Check if containers are running
+            if $D ps | grep -q "nester-backend.*Up"; then
+              echo "✅ Backend is running"
+            else
+              echo "⚠️  Backend may still be starting..."
+            fi
+            
+            if $D ps | grep -q "nester-frontend.*Up"; then
+              echo "✅ Frontend is running"
+            else
+              echo "⚠️  Frontend may still be starting..."
+            fi
+            
+            echo "✅ Deployment complete!"
+
+  post-deploy:
+    name: Post-Deployment Verification
+    runs-on: ubuntu-latest
+    needs: [build, deploy]
+    
+    steps:
+      - name: Health Check
+        run: |
+          PUBLIC_URL="${{ secrets.PUBLIC_URL }}"
+          MAX_RETRIES=6
+          RETRY_DELAY=20
+          
+          if [ -z "$PUBLIC_URL" ]; then
+            echo "⚠️  PUBLIC_URL not set in secrets, skipping health check"
+            exit 0
+          fi
+          
+          echo "🔍 Performing health check on: ${PUBLIC_URL}/health"
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Attempt $i/$MAX_RETRIES..."
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 --insecure "${PUBLIC_URL}/health" 2>/dev/null || echo "000")
+            
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Health check passed (HTTP $HTTP_CODE)"
+              exit 0
+            else
+              echo "⚠️  Health check returned HTTP $HTTP_CODE"
+              if [ $i -lt $MAX_RETRIES ]; then
+                echo "Retrying in ${RETRY_DELAY}s..."
+                sleep $RETRY_DELAY
+              fi
+            fi
+          done
+          
+          echo "⚠️  Health check didn't pass after $MAX_RETRIES attempts"
+          echo "   The service may still be starting up - check manually"
+          exit 0
+
+      - name: Fetch Container Logs
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ${{ secrets.LIGHTSAIL_USER }}
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            echo "=========================================="
+            echo "🔍 DEPLOYMENT DIAGNOSTICS"
+            echo "=========================================="
+            
+            cd ~/nester-bot 2>/dev/null || cd /home/*/nester-bot 2>/dev/null || { echo "No nester-bot directory found"; exit 0; }
+            
+            # Use sudo if needed
+            if groups | grep -q docker; then
+              D="docker"
+            else
+              D="sudo docker"
+            fi
+            
+            echo ""
+            echo "=== Container Status ==="
+            $D ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}'
+            
+            echo ""
+            echo "=== Backend Logs (last 50 lines) ==="
+            $D logs --tail 50 nester-backend 2>&1 || echo "Could not fetch backend logs"
+            
+            echo ""
+            echo "=== Recent Errors ==="
+            $D logs --tail 200 nester-backend 2>&1 | grep -i "error\|exception\|failed" | tail -10 || echo "No recent errors"
+            
+            echo ""
+            echo "=========================================="
+            echo "✅ Diagnostics complete"
+            echo "=========================================="

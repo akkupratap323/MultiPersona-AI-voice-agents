@@ -1,0 +1,226 @@
+# Deploy to AWS Lightsail
+# Triggers on push to main branch or manual dispatch
+#
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID     - AWS credentials with ECR push permissions
+#   AWS_SECRET_ACCESS_KEY - AWS credentials
+#   AWS_ACCOUNT_ID        - Your AWS account ID (e.g., 196061557238)
+#   LIGHTSAIL_SSH_KEY     - Private SSH key for Lightsail instance
+#   LIGHTSAIL_HOST        - Static IP of Lightsail instance
+
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [upgrade-pipecat-0.0.100]
+    paths:
+      - 'app/**'
+      - 'client/**'
+      - 'deployment/docker/**'
+      - '.github/workflows/deploy-aws.yml'
+  workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force rebuild all images'
+        required: false
+        default: 'false'
+        type: boolean
+      skip_deploy:
+        description: 'Skip deployment (build only)'
+        required: false
+        default: 'false'
+        type: boolean
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+  ENVIRONMENT: ${{ vars.ENVIRONMENT || 'dev' }}
+  PUBLIC_URL: ${{ vars.PUBLIC_URL || 'https://ai.nesterlabs.com' }}
+
+jobs:
+  # Detect what changed to only build necessary images
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.changes.outputs.backend }}
+      frontend: ${{ steps.changes.outputs.frontend }}
+      deployment: ${{ steps.changes.outputs.deployment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: changes
+        with:
+          filters: |
+            backend:
+              - 'app/**'
+              - 'deployment/docker/Dockerfile'
+              - 'requirements.txt'
+              - 'pyproject.toml'
+            frontend:
+              - 'client/**'
+            deployment:
+              - 'deployment/docker/docker-compose.prod.yml'
+              - 'deployment/docker/Caddyfile.prod'
+
+  # Build and push backend image
+  build-backend:
+    name: Build Backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || github.event.inputs.force_build == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: deployment/docker/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/nester-ai-${{ env.ENVIRONMENT }}-backend:latest
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/nester-ai-${{ env.ENVIRONMENT }}-backend:${{ github.sha }}
+          build-args: |
+            CACHEBUST=${{ github.sha }}
+          no-cache: true
+
+  # Build and push frontend image
+  build-frontend:
+    name: Build Frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' || github.event.inputs.force_build == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          file: ./client/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/nester-ai-${{ env.ENVIRONMENT }}-frontend:latest
+            ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ env.AWS_REGION }}.amazonaws.com/nester-ai-${{ env.ENVIRONMENT }}-frontend:${{ github.sha }}
+          build-args: |
+            CACHEBUST=${{ github.sha }}
+          no-cache: true
+
+  # Deploy to Lightsail
+  deploy:
+    name: Deploy to Lightsail
+    needs: [changes, build-backend, build-frontend]
+    if: |
+      always() &&
+      github.event.inputs.skip_deploy != 'true' &&
+      (needs.build-backend.result == 'success' || needs.build-backend.result == 'skipped') &&
+      (needs.build-frontend.result == 'success' || needs.build-frontend.result == 'skipped') &&
+      (needs.build-backend.result == 'success' || needs.build-frontend.result == 'success' || needs.changes.outputs.deployment == 'true')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Copy deployment files to server
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ec2-user
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          source: "deployment/docker/docker-compose.prod.yml,deployment/docker/Caddyfile.prod"
+          target: "/tmp/deploy"
+          strip_components: 2
+
+      - name: Deploy to Lightsail instance
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.LIGHTSAIL_HOST }}
+          username: ec2-user
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          script: |
+            echo "=== Starting deployment ==="
+            cd /opt/nester
+
+            # Update docker-compose.yml from repo
+            if [ -f /tmp/deploy/docker-compose.prod.yml ]; then
+              echo "Updating docker-compose.yml..."
+              sudo cp /tmp/deploy/docker-compose.prod.yml /opt/nester/docker-compose.yml
+            fi
+
+            # Update Caddyfile from repo (if exists)
+            if [ -f /tmp/deploy/Caddyfile.prod ]; then
+              echo "Updating Caddyfile..."
+              sudo cp /tmp/deploy/Caddyfile.prod /opt/nester/Caddyfile
+            fi
+
+            # Clean up
+            rm -rf /tmp/deploy
+
+            # Remove old Docker images, containers, and volumes to free disk space
+            echo "=== Cleaning up old Docker resources ==="
+            docker system prune -a -f --volumes || true
+
+            # Run the deploy script (handles ECR login, pull, restart)
+            ./deploy.sh
+
+            echo "=== Deployment complete ==="
+
+  # Verify deployment
+  verify:
+    name: Health Check
+    needs: deploy
+    if: needs.deploy.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for services to stabilize
+        run: sleep 30
+
+      - name: Health check
+        run: |
+          echo "Verifying deployment at ${{ env.PUBLIC_URL }}..."
+          curl -f --retry 3 --retry-delay 10 ${{ env.PUBLIC_URL }}/health || \
+          curl -f --retry 3 --retry-delay 10 http://${{ secrets.LIGHTSAIL_HOST }}:7860/health
+          echo "Health check passed!"
+
+  # Notify on failure
+  notify:
+    name: Notify on Failure
+    needs: [build-backend, build-frontend, deploy, verify]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure notification
+        run: |
+          echo "::error::Deployment failed! Check the workflow logs for details."
+          # Add Slack/Discord notification here:
+          # curl -X POST -H 'Content-type: application/json' \
+          #   --data '{"text":"Deployment failed!"}' \
+          #   ${{ secrets.SLACK_WEBHOOK_URL }}
