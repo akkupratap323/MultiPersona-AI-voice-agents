@@ -119,10 +119,14 @@ def get_assistant_config() -> Dict[str, Any]:
             "conversation.llm.api_key",
             config.get("conversation", {}).get("llm", {}).get("api_key"),
         ),
+        (
+            "stt.config.api_key",
+            config.get("stt", {}).get("config", {}).get("api_key"),
+        ),
     ]
 
     # Check for voice config based on TTS provider
-    tts_provider = config.get("tts", {}).get("provider", "deepgram")
+    tts_provider = config.get("tts", {}).get("provider", "cartesia")
     if tts_provider == "elevenlabs":
         required_keys.append(
             ("tts.config.voice_id", config.get("tts", {}).get("config", {}).get("voice_id"))
@@ -136,7 +140,7 @@ def get_assistant_config() -> Dict[str, Any]:
     if missing_keys:
         raise ValueError(
             f"Missing required environment variables for: {', '.join(missing_keys)}. "
-            f"Please check your .env file and config.yaml"
+            f"Please check your .env file and ensure all API keys are set."
         )
 
     return config
