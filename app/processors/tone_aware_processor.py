@@ -104,11 +104,11 @@ class ToneAwareProcessor(FrameProcessor):
         # Text-based fallback detector
         self.tone_detector = ToneDetector(cooldown_seconds=cooldown_seconds)
 
-        # NEW: Hybrid emotion detector (audio + LLM text sentiment via Google Gemini)
+        # Hybrid emotion detector (audio + LLM text sentiment via Google Gemini)
         self.use_hybrid_mode = use_hybrid_mode
         self.hybrid_detector = HybridEmotionDetector(
             audio_detector=self.emotion_detector,
-            llm_api_key=groq_api_key  # Now uses Google Gemini API
+            llm_api_key=groq_api_key,
         ) if use_hybrid_mode else None
 
         self.tts_service = tts_service
@@ -128,7 +128,7 @@ class ToneAwareProcessor(FrameProcessor):
         self._emotion_timestamp: float = 0.0  # NON-BLOCKING: Track when emotion was last updated
         self._emotion_ttl_seconds: float = 10.0  # NON-BLOCKING: Expire emotions after 10 seconds
 
-        # NEW: Hybrid detection state
+        # Hybrid detection state
         self._latest_transcript: str = ""  # Store last transcript for hybrid mode
 
         # NON-BLOCKING: Background task tracking
