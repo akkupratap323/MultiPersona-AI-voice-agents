@@ -295,7 +295,7 @@ class LightRAGService(BaseRAGService):
                                     chunk = data.get("response", "")
                                     if chunk and first_chunk_time is None:
                                         first_chunk_time = time.time()
-                                        logger.info(f"⚡ RAG FIRST CHUNK: {first_chunk_time - start_time:.3f}s")
+                                        logger.debug(f"RAG first chunk: {first_chunk_time - start_time:.3f}s")
                                     full_response += chunk
                                 elif "error" in data:
                                     logger.error(f"LightRAG streaming error: {data.get('error')}")
@@ -310,7 +310,7 @@ class LightRAGService(BaseRAGService):
 
             end_time = time.time()
             total_time = end_time - start_time
-            logger.info(f"✅ RAG COMPLETE: Total={total_time:.3f}s, Length={len(full_response)} chars")
+            logger.debug(f"RAG complete: {total_time:.3f}s, {len(full_response)} chars")
 
             if "[no-context]" in full_response:
                 logger.warning("LightRAG: No context found for query")
@@ -350,14 +350,8 @@ class LightRAGService(BaseRAGService):
         """
         start_time = time.time()
 
-        logger.info("=" * 60)
-        logger.info("🎨 RAG+A2UI QUERY STARTING")
-        logger.info(f"   Query: '{query[:60]}...'")
-        logger.info(f"   Template provided: {a2ui_template is not None}")
-        if a2ui_template:
-            template_type = a2ui_template.get("root", {}).get("type", "unknown")
-            logger.info(f"   Template type: {template_type}")
-        logger.info("=" * 60)
+        template_type = a2ui_template.get("root", {}).get("type", "none") if a2ui_template else "none"
+        logger.debug(f"RAG+A2UI query: '{query[:60]}' template={template_type}")
 
         try:
             # Build payload with A2UI template
