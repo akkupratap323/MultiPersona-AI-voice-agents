@@ -247,9 +247,10 @@ personas:
     customer_support:
       name: "Blake"
       role: "Customer Support"
-      description: "Energetic and engaging support specialist"
+      description: "Energetic and engaging support specialist — handles product questions and troubleshooting"
       avatar: "/personas/customer-support.webp"
-      voice_id: "a167e0f3-df7e-4d52-a9c3-f949145efdab"  # Blake - Helpful Agent (hardcoded)
+      language: "en"
+      voice_id: "a167e0f3-df7e-4d52-a9c3-f949145efdab"  # Blake - Helpful Agent
       greetings:
         - "Hey! I'm Blake from support. I'm here to help you. What can I do for you? "
         - "Hi there! Blake here. How can I help you today? "
