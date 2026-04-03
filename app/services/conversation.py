@@ -101,7 +101,7 @@ class ConversationManager:
         if not api_key:
             raise ValueError("LLM API key is required")
 
-        provider = self.llm_config.get("provider", "google")
+        provider = self.llm_config.get("provider", "groq")
 
         if provider == "openai":
             model = self.llm_config.get("model", "gpt-4o")
