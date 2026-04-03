@@ -62,9 +62,9 @@ input_analyzer:
 
 conversation:
   llm:
-    provider: "groq"
-    model: "llama-3.1-8b-instant"
-    api_key: "${GROQ_API_KEY}"
+    provider: "deepseek"
+    model: "deepseek-chat"
+    api_key: "${DEEPSEEK_API_KEY}"
     temperature: 0.7  # Balanced - natural but focused responses
     max_tokens: 300  # REDUCED: Shorter responses for faster TTS start (was 1000)
 

@@ -103,7 +103,15 @@ class ConversationManager:
 
         provider = self.llm_config.get("provider", "groq")
 
-        if provider == "openai":
+        if provider == "deepseek":
+            model = self.llm_config.get("model", "deepseek-chat")
+            self.llm_service = GroqLLMService(
+                api_key=api_key,
+                model=model,
+                base_url="https://api.deepseek.com",
+            )
+            logger.info(f"Initialized DeepSeek LLM service with model: {model}")
+        elif provider == "openai":
             model = self.llm_config.get("model", "gpt-4o")
             self.llm_service = OpenAILLMService(
                 api_key=api_key,
