@@ -66,3 +66,18 @@ def get_logger(name: str):
         Configured logger instance
     """
     return logger.bind(name=name)
+
+
+def log_latency(stage: str, elapsed_ms: float, session_id: str = "") -> None:
+    """Log a latency measurement for a named pipeline stage.
+
+    Args:
+        stage: Pipeline stage name (e.g. 'stt', 'llm', 'tts')
+        elapsed_ms: Elapsed time in milliseconds
+        session_id: Optional session identifier for correlation
+    """
+    ctx = f"[{session_id}] " if session_id else ""
+    if elapsed_ms > 2000:
+        logger.warning(f"{ctx}SLOW {stage}: {elapsed_ms:.0f}ms")
+    else:
+        logger.debug(f"{ctx}{stage}: {elapsed_ms:.0f}ms")
