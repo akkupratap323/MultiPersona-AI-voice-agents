@@ -351,14 +351,8 @@ class LightRAGService(BaseRAGService):
         """
         start_time = time.time()
 
-        logger.info("=" * 60)
-        logger.info("🎨 RAG+A2UI QUERY STARTING")
-        logger.info(f"   Query: '{query[:60]}...'")
-        logger.info(f"   Template provided: {a2ui_template is not None}")
-        if a2ui_template:
-            template_type = a2ui_template.get("root", {}).get("type", "unknown")
-            logger.info(f"   Template type: {template_type}")
-        logger.info("=" * 60)
+        template_type = a2ui_template.get("root", {}).get("type", "none") if a2ui_template else "none"
+        logger.debug(f"RAG+A2UI query: '{query[:60]}' template={template_type}")
 
         try:
             # Build payload with A2UI template
