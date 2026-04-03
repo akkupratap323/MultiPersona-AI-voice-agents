@@ -125,7 +125,7 @@ class ConnectionManager:
                 await asyncio.sleep(30)  # 30 second interval
                 try:
                     # Send ping frame
-                    await websocket.send_json({"type": "ping", "timestamp": asyncio.get_event_loop().time()})
+                    await websocket.send_json({"type": "ping", "timestamp": asyncio.get_running_loop().time()})
                     logger.debug(f"[Session {session_id}] Heartbeat ping sent")
                 except Exception as e:
                     logger.warning(f"[Session {session_id}] Heartbeat failed: {e}")
