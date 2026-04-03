@@ -1,0 +1,27 @@
+# Core dependencies
+fastapi~=0.115.14
+uvicorn~=0.35.0
+python-dotenv~=1.1.1
+PyYAML~=6.0.2
+loguru~=0.7.3
+
+# Pipecat Voice AI Framework
+pipecat-ai[daily,deepgram,cartesia,silero,websocket,google,openai,koala,elevenlabs]==0.0.98
+pipecat-ai-small-webrtc-prebuilt
+
+# HTTP client for LightRAG API (external RAG service)
+httpx[http2]>=0.27.0  # HTTP/2 support for better performance
+
+# Audio analysis for tone detection (kaiser_best resampling)
+librosa>=0.10.0  # Audio feature extraction with high-quality resampling
+numpy>=1.24.0    # Numerical operations for audio processing
+
+# Emotion detection dependencies (MSP-PODCAST wav2vec2)
+torch>=2.0.0  # PyTorch for wav2vec2 emotion detection models
+transformers>=4.30.0  # Hugging Face transformers for wav2vec2 models
+
+# Google Gemini for keyword extraction and text sentiment
+google-generativeai>=0.8.0
+
+# Semantic template selection for A2UI (intent understanding)
+sentence-transformers>=2.2.0  # Multi-qa-MiniLM-L6-cos-v1 for query embeddings
