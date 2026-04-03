@@ -1,0 +1,147 @@
+/* SynchronizedAnalysis - scoped styles (replaces Tailwind) */
+.sync-analysis {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.sync-card {
+  --sync-grid-line-color: #44444E; /* Horizontal/row grid line color; override to customize */
+  --sync-grid-line-color-vertical: #44444E; /* Vertical grid line color; override for different vertical color */
+  --sync-x-axis-label-font-size: 9px; /* Horizontal x-axis time label font size */
+  --sync-x-axis-label-color: #7D7D7D; /* Horizontal x-axis time label color */
+  background: #000;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  height: 100%;
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sync-card-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.sync-scroll-area {
+  position: absolute;
+  inset: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.sync-scroll-area-both {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+}
+
+.sync-chart-inner {
+  position: relative;
+}
+
+.sync-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #7D7D7D;
+  font-size: 0.875rem;
+}
+
+.sync-legend {
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.sync-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sync-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.sync-legend-dot.cyan {
+  background: #06b6d4;
+}
+
+.sync-legend-dot.orange {
+  background: #eab308; /* Match topic flow chart yellow (AI boxes + circles) */
+}
+
+.sync-legend-dot.purple {
+  background: #a855f7;
+}
+
+.sync-legend-dot.rose {
+  background: #f43f5e;
+}
+
+.sync-legend-text {
+  color: rgba(245, 245, 245, 0.75);
+  font-family: "JetBrains Mono";
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 500;
+  line-height: normal;
+}
+
+.sync-sticky-y {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 3.5rem;
+  background: #000;
+  pointer-events: none;
+  z-index: 10;
+  height: 100%;
+  /* Ensure chart content never shows through behind y-axis labels when scrolled */
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.5);
+}
+
+.sync-sticky-x {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #000;
+  pointer-events: none;
+  z-index: 10;
+  height: 24px;
+}
+
+.sync-scroll-to-latest {
+  position: absolute;
+  bottom: 30px;
+  right: 8px;
+  z-index: 20;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid #f97316;
+  background: rgba(17, 24, 39, 0.9);
+  color: #f97316;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+  transition: opacity 0.2s;
+}
+
+.sync-scroll-to-latest:hover {
+  opacity: 1;
+  background: rgba(249, 115, 22, 0.15);
+}

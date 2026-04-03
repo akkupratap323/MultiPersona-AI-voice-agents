@@ -1,0 +1,42 @@
+{
+  "name": "client",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "@types/protobufjs": "^6.0.0",
+    "@types/react": "^19.2.10",
+    "@types/react-dom": "^19.2.3",
+    "@types/seedrandom": "^3.0.8",
+    "@vitejs/plugin-react-swc": "^3.10.1",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  },
+  "dependencies": {
+    "@pipecat-ai/client-js": "^0.4.0",
+    "@pipecat-ai/websocket-transport": "^0.4.2",
+    "@react-sigma/core": "^5.0.6",
+    "@react-sigma/layout-forceatlas2": "^5.0.6",
+    "@sigma/edge-curve": "^3.1.0",
+    "@sigma/node-border": "^3.0.0",
+    "graphology": "^0.26.0",
+    "graphology-types": "^0.24.8",
+    "minisearch": "^7.2.0",
+    "motion": "^12.34.0",
+    "protobufjs": "^7.4.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "seedrandom": "^3.0.5",
+    "sigma": "^3.0.2"
+  }
+}

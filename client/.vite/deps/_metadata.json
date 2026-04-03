@@ -1,0 +1,109 @@
+{
+  "hash": "cae4fbc1",
+  "configHash": "5bf65bc2",
+  "lockfileHash": "608d1df3",
+  "browserHash": "4938349e",
+  "optimized": {
+    "react/jsx-dev-runtime": {
+      "src": "../../node_modules/react/jsx-dev-runtime.js",
+      "file": "react_jsx-dev-runtime.js",
+      "fileHash": "d1c9a10f",
+      "needsInterop": true
+    },
+    "react-dom/client": {
+      "src": "../../node_modules/react-dom/client.js",
+      "file": "react-dom_client.js",
+      "fileHash": "c98eebea",
+      "needsInterop": true
+    },
+    "@pipecat-ai/client-js": {
+      "src": "../../node_modules/@pipecat-ai/client-js/dist/index.module.js",
+      "file": "@pipecat-ai_client-js.js",
+      "fileHash": "ab92f33e",
+      "needsInterop": false
+    },
+    "@pipecat-ai/websocket-transport": {
+      "src": "../../node_modules/@pipecat-ai/websocket-transport/dist/index.module.js",
+      "file": "@pipecat-ai_websocket-transport.js",
+      "fileHash": "4ef49e27",
+      "needsInterop": false
+    },
+    "react": {
+      "src": "../../node_modules/react/index.js",
+      "file": "react.js",
+      "fileHash": "f3d3af59",
+      "needsInterop": true
+    },
+    "@react-sigma/core": {
+      "src": "../../node_modules/@react-sigma/core/lib/react-sigma_core.esm.min.js",
+      "file": "@react-sigma_core.js",
+      "fileHash": "7cc89316",
+      "needsInterop": false
+    },
+    "@react-sigma/layout-forceatlas2": {
+      "src": "../../node_modules/@react-sigma/layout-forceatlas2/lib/react-sigma_layout-forceatlas2.esm.min.js",
+      "file": "@react-sigma_layout-forceatlas2.js",
+      "fileHash": "e55c4db6",
+      "needsInterop": false
+    },
+    "graphology": {
+      "src": "../../node_modules/graphology/dist/graphology.mjs",
+      "file": "graphology.js",
+      "fileHash": "0d478eee",
+      "needsInterop": false
+    },
+    "sigma/rendering": {
+      "src": "../../node_modules/sigma/rendering/dist/sigma-rendering.esm.js",
+      "file": "sigma_rendering.js",
+      "fileHash": "ae0f9d9e",
+      "needsInterop": false
+    },
+    "@sigma/edge-curve": {
+      "src": "../../node_modules/@sigma/edge-curve/dist/sigma-edge-curve.esm.js",
+      "file": "@sigma_edge-curve.js",
+      "fileHash": "415978b7",
+      "needsInterop": false
+    },
+    "minisearch": {
+      "src": "../../node_modules/minisearch/dist/es/index.js",
+      "file": "minisearch.js",
+      "fileHash": "af29a423",
+      "needsInterop": false
+    },
+    "seedrandom": {
+      "src": "../../node_modules/seedrandom/index.js",
+      "file": "seedrandom.js",
+      "fileHash": "8f3c4cc4",
+      "needsInterop": true
+    }
+  },
+  "chunks": {
+    "chunk-W5R4DB2E": {
+      "file": "chunk-W5R4DB2E.js"
+    },
+    "chunk-QAFOO6OI": {
+      "file": "chunk-QAFOO6OI.js"
+    },
+    "chunk-SRZRMQHD": {
+      "file": "chunk-SRZRMQHD.js"
+    },
+    "chunk-XHBEL7IJ": {
+      "file": "chunk-XHBEL7IJ.js"
+    },
+    "chunk-NTXYWN7O": {
+      "file": "chunk-NTXYWN7O.js"
+    },
+    "chunk-QYXY6RWP": {
+      "file": "chunk-QYXY6RWP.js"
+    },
+    "chunk-LQBAZ7HZ": {
+      "file": "chunk-LQBAZ7HZ.js"
+    },
+    "chunk-E6PT4EQ2": {
+      "file": "chunk-E6PT4EQ2.js"
+    },
+    "chunk-5WRI5ZAA": {
+      "file": "chunk-5WRI5ZAA.js"
+    }
+  }
+}
