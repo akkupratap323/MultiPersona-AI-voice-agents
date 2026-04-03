@@ -117,7 +117,8 @@ class TextFilterProcessor(FrameProcessor):
 
         # Strip leaked LLM function call syntax (Llama native format)
         # e.g. <function=call_rag_system>{"question": "..."}</function>
-        text = re.sub(r'<function=[^>]*>\{[^}]*\}</function>', '', text)
+        # Also handles multi-line JSON bodies in the function tag
+        text = re.sub(r'<function=[^>]*>[\s\S]*?</function>', '', text)
         text = re.sub(r'function=\w+\{[^}]*\}', '', text)
 
         # Escape XML/SSML special characters to prevent TTS errors
