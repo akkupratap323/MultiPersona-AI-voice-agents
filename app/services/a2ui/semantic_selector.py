@@ -61,22 +61,16 @@ class SemanticTemplateSelector:
         """
         _load_sentence_transformers()
 
-        logger.info("=" * 60)
-        logger.info("🧠 SEMANTIC TEMPLATE SELECTOR INITIALIZING")
-        logger.info(f"   Model: {model_name}")
-        logger.info("=" * 60)
-
-        logger.info(f"📥 Loading Sentence Transformer model: {model_name}...")
+        logger.info(f"SemanticTemplateSelector: loading model '{model_name}'...")
         self.model = SentenceTransformer(model_name)
-        logger.info("✅ Model loaded successfully")
 
         # Pre-compute template embeddings from metadata
         self._build_template_embeddings()
 
-        logger.info("=" * 60)
-        logger.info("🧠 SEMANTIC SELECTOR READY")
-        logger.info(f"   Templates indexed: {len(self.template_embeddings)}")
-        logger.info("=" * 60)
+        logger.info(
+            f"SemanticTemplateSelector ready — "
+            f"{len(self.template_embeddings)} templates indexed"
+        )
 
     def _build_template_embeddings(self):
         """
@@ -90,7 +84,7 @@ class SemanticTemplateSelector:
         """
         from .template_library import list_available_templates
 
-        logger.info("📊 Building template embeddings from template_library metadata...")
+        logger.debug("Building template embeddings from template_library metadata...")
         template_metadata = list_available_templates()
 
         self.template_embeddings = {}
