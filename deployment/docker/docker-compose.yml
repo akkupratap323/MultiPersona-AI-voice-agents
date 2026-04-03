@@ -1,0 +1,48 @@
+services:
+  # Backend - Python FastAPI + Pipecat Voice Assistant
+  backend:
+    build:
+      context: ../../
+      dockerfile: deployment/docker/Dockerfile
+    container_name: nester-backend
+    env_file:
+      - ../../.env
+    ports:
+      - "7860:7860"
+    environment:
+      # Server Configuration (these override .env if needed)
+      - FASTAPI_HOST=0.0.0.0
+      - FASTAPI_PORT=7860
+      - SESSION_TIMEOUT=180
+      - LOG_LEVEL=INFO
+    volumes:
+      - ../../data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 30s
+    networks:
+      - nester-network
+
+  # Frontend - Vite + TypeScript served by Nginx
+  frontend:
+    build:
+      context: ../../client
+      dockerfile: Dockerfile
+    container_name: nester-frontend
+    ports:
+      - "80:80"
+    environment:
+      - BACKEND_URL=http://backend:7860
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - nester-network
+
+networks:
+  nester-network:
+    driver: bridge

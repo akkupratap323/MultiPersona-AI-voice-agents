@@ -1,0 +1,58 @@
+# Docker Compose for GitHub Container Registry (GHCR) deployment
+# Uses pre-built images from ghcr.io instead of building locally
+# Environment variables are loaded from .env file on the deployment server
+
+version: '3.8'
+
+services:
+  # Backend - Pre-built image from GHCR
+  backend:
+    image: ghcr.io/nesterlabs-ai/nesteraibot-backend:latest
+    container_name: nester-backend
+    restart: unless-stopped
+    ports:
+      - "7860:7860"
+    environment:
+      # API Keys - loaded from .env file
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - RESEMBLE_API_KEY=${RESEMBLE_API_KEY}
+      - RESEMBLE_VOICE_UUID=${RESEMBLE_VOICE_UUID:-8b0c7b93}
+      - LIGHTRAG_BASE_URL=${LIGHTRAG_BASE_URL}
+      - LIGHTRAG_API_KEY=${LIGHTRAG_API_KEY}
+      - PUBLIC_URL=${PUBLIC_URL}
+      # Server Configuration
+      - FASTAPI_HOST=0.0.0.0
+      - FASTAPI_PORT=7860
+      # Session Settings
+      - SESSION_TIMEOUT=180
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data
+    networks:
+      - nester-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+
+  # Frontend - Pre-built image from GHCR
+  frontend:
+    image: ghcr.io/nesterlabs-ai/nesteraibot-frontend:latest
+    container_name: nester-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    environment:
+      - BACKEND_URL=http://backend:7860
+    depends_on:
+      - backend
+    networks:
+      - nester-network
+
+networks:
+  nester-network:
+    driver: bridge
+

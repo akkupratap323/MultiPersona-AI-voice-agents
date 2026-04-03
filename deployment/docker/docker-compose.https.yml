@@ -1,0 +1,104 @@
+# Docker Compose with Caddy for HTTPS
+# Use this instead of docker-compose.yml for HTTPS deployment
+
+services:
+  # Caddy - Reverse Proxy with automatic HTTPS
+  caddy:
+    image: caddy:2-alpine
+    container_name: nester-caddy
+    restart: always
+    ports:
+      - "80:80"      # HTTP (redirects to HTTPS)
+      - "443:443"    # HTTPS
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./deployment/docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data        # SSL certificates
+      - caddy_config:/config    # Caddy config
+    deploy:
+      resources:
+        limits:
+          memory: 100M
+        reservations:
+          memory: 20M
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - nester-network
+
+  # Backend - Python FastAPI + Pipecat Voice Assistant
+  backend:
+    image: ghcr.io/nesterlabs-ai/nesteraibot-backend:${IMAGE_TAG:-latest}
+    pull_policy: always  # CRITICAL: Forces GHCR pull, prevents local cache reuse
+    container_name: nester-backend
+    # Ports NOT exposed externally - only through Caddy
+    expose:
+      - "7860"
+    env_file:
+      - .env
+    environment:
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - RESEMBLE_API_KEY=${RESEMBLE_API_KEY}
+      - RESEMBLE_VOICE_UUID=${RESEMBLE_VOICE_UUID:-8b0c7b93}
+      - LIGHTRAG_API_KEY=${LIGHTRAG_API_KEY}
+      - LIGHTRAG_BASE_URL=${LIGHTRAG_BASE_URL}
+      - PUBLIC_URL=${PUBLIC_URL}
+      - FASTAPI_HOST=0.0.0.0
+      - FASTAPI_PORT=7860
+      - SESSION_TIMEOUT=180
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 400M
+        reservations:
+          memory: 200M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    networks:
+      - nester-network
+
+  # Frontend - Nginx serving static files
+  frontend:
+    image: ghcr.io/nesterlabs-ai/nesteraibot-frontend:${IMAGE_TAG:-latest}
+    pull_policy: always  # CRITICAL: Forces GHCR pull, prevents local cache reuse
+    container_name: nester-frontend
+    # Port NOT exposed externally - only through Caddy
+    expose:
+      - "80"
+    environment:
+      - BACKEND_URL=${PUBLIC_URL}
+    deploy:
+      resources:
+        limits:
+          memory: 50M
+        reservations:
+          memory: 10M
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: always
+    networks:
+      - nester-network
+
+networks:
+  nester-network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+    driver: local
+  caddy_config:
+    driver: local
+

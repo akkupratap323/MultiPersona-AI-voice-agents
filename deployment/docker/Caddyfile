@@ -1,0 +1,80 @@
+# Caddyfile for NesterConversationalBot
+# Caddy automatically handles SSL certificates via Let's Encrypt
+
+# Replace YOUR_DOMAIN with your actual domain or use IP.nip.io for free domain
+# Examples:
+#   - yourdomain.com
+#   - nester.yourdomain.com  
+#   - 123.45.67.89.nip.io (free subdomain using your IP)
+
+{$DOMAIN:localhost} {
+    # API endpoints - proxy to backend (MUST be before catch-all)
+    handle /connect* {
+        reverse_proxy backend:7860
+    }
+
+    handle /status* {
+        reverse_proxy backend:7860
+    }
+
+    handle /health* {
+        reverse_proxy backend:7860
+    }
+
+    # WebSocket endpoint - route to FastAPI server (port 7860) for FastAPI mode
+    handle /ws* {
+        reverse_proxy backend:7860 {
+            header_up Connection {header.Connection}
+            header_up Upgrade {header.Upgrade}
+            # Disable buffering for real-time streaming
+            flush_interval -1
+            # Keep connection alive for long-running sessions
+            transport http {
+                keepalive 30s
+                keepalive_idle_conns 10
+            }
+        }
+    }
+
+    # Frontend - catch-all for static files and SPA routes (MUST be last)
+    handle {
+        reverse_proxy frontend:80
+    }
+
+    # Security headers
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Enable compression
+    encode gzip
+
+    # Logging - use stdout for Docker compatibility
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Alternative: If you want to use IP-based access with nip.io
+# Uncomment below and replace with your Lightsail static IP
+# 
+# {$STATIC_IP}.nip.io {
+#     reverse_proxy frontend:80
+#     
+#     handle /connect* {
+#         reverse_proxy backend:7860
+#     }
+#     
+#     handle /status* {
+#         reverse_proxy backend:7860
+#     }
+#     
+#     handle /ws* {
+#         reverse_proxy backend:7860
+#     }
+# }
+

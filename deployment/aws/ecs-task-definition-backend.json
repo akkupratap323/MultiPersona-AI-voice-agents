@@ -1,0 +1,99 @@
+{
+  "family": "nester-backend",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "executionRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::YOUR_ACCOUNT_ID:role/ecsTaskRole",
+  "containerDefinitions": [
+    {
+      "name": "nester-backend",
+      "image": "YOUR_ACCOUNT_ID.dkr.ecr.YOUR_REGION.amazonaws.com/nester-backend:latest",
+      "essential": true,
+      "portMappings": [
+        {
+          "containerPort": 7860,
+          "hostPort": 7860,
+          "protocol": "tcp"
+        },
+        {
+          "containerPort": 8765,
+          "hostPort": 8765,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "FASTAPI_HOST",
+          "value": "0.0.0.0"
+        },
+        {
+          "name": "FASTAPI_PORT",
+          "value": "7860"
+        },
+        {
+          "name": "WEBSOCKET_HOST",
+          "value": "0.0.0.0"
+        },
+        {
+          "name": "WEBSOCKET_PORT",
+          "value": "8765"
+        },
+        {
+          "name": "WEBSOCKET_SERVER",
+          "value": "websocket_server"
+        },
+        {
+          "name": "SESSION_TIMEOUT",
+          "value": "180"
+        },
+        {
+          "name": "LOG_LEVEL",
+          "value": "INFO"
+        }
+      ],
+      "secrets": [
+        {
+          "name": "DEEPGRAM_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_ACCOUNT_ID:secret:nester/api-keys:DEEPGRAM_API_KEY::"
+        },
+        {
+          "name": "ELEVENLABS_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_ACCOUNT_ID:secret:nester/api-keys:ELEVENLABS_API_KEY::"
+        },
+        {
+          "name": "ELEVENLABS_VOICE_ID",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_ACCOUNT_ID:secret:nester/api-keys:ELEVENLABS_VOICE_ID::"
+        },
+        {
+          "name": "OPENAI_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_ACCOUNT_ID:secret:nester/api-keys:OPENAI_API_KEY::"
+        },
+        {
+          "name": "PINECONE_API_KEY",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_ACCOUNT_ID:secret:nester/api-keys:PINECONE_API_KEY::"
+        },
+        {
+          "name": "PINECONE_INDEX",
+          "valueFrom": "arn:aws:secretsmanager:YOUR_REGION:YOUR_ACCOUNT_ID:secret:nester/api-keys:PINECONE_INDEX::"
+        }
+      ],
+      "healthCheck": {
+        "command": ["CMD-SHELL", "curl -f http://localhost:7860/status || exit 1"],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/nester-backend",
+          "awslogs-region": "YOUR_REGION",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

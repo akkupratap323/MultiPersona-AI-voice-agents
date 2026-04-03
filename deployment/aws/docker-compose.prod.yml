@@ -1,0 +1,58 @@
+# Production Docker Compose for Single EC2 Instance
+# Budget-friendly: runs both services on one machine
+
+version: '3.8'
+
+services:
+  # Backend - Python FastAPI + Pipecat Voice Assistant
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nester-backend
+    restart: always
+    environment:
+      - DEEPGRAM_API_KEY=${DEEPGRAM_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - LIGHTRAG_BASE_URL=${LIGHTRAG_BASE_URL}
+      - FASTAPI_HOST=0.0.0.0
+      - FASTAPI_PORT=7860
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data
+    networks:
+      - nester-network
+    # Resource limits for t3.small (2GB RAM)
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  # Frontend - Nginx serving static files + reverse proxy
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: nester-frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - BACKEND_URL=http://backend:7860
+    depends_on:
+      - backend
+    networks:
+      - nester-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+networks:
+  nester-network:
+    driver: bridge

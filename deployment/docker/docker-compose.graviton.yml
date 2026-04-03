@@ -1,0 +1,107 @@
+# Production docker-compose for Graviton (ARM64) deployment
+# This file is synced to /opt/nester/docker-compose.yml during CI/CD deployment
+#
+# Key differences from docker-compose.prod.yml:
+# - ARM64 ECR image references (nester-ai-graviton-test-*)
+# - Graviton PyTorch optimization environment variables
+# - CloudWatch log group: /nester-ai/graviton-test
+# - No Docker daemon credential hack needed (EC2 instance role)
+
+x-logging: &cloudwatch-logging
+  driver: awslogs
+  options:
+    awslogs-group: ${CLOUDWATCH_LOG_GROUP:-/nester-ai/graviton-test}
+    awslogs-region: ${AWS_REGION:-us-west-2}
+    awslogs-create-group: "true"
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: nester-caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - nester-network
+    logging:
+      <<: *cloudwatch-logging
+      options:
+        awslogs-group: ${CLOUDWATCH_LOG_GROUP:-/nester-ai/graviton-test}
+        awslogs-region: ${AWS_REGION:-us-west-2}
+        awslogs-stream: caddy
+        awslogs-create-group: "true"
+
+  backend:
+    image: ${BACKEND_IMAGE:-196061557238.dkr.ecr.us-west-2.amazonaws.com/nester-ai-graviton-test-backend:latest}
+    container_name: nester-backend
+    restart: always
+    expose:
+      - "7860"
+      - "8765"
+    env_file:
+      - .env
+    environment:
+      # Graviton PyTorch optimizations
+      - DNNL_DEFAULT_FPMATH_MODE=BF16
+      - LRU_CACHE_CAPACITY=1024
+      - THP_MEM_ALLOC_ENABLE=1
+      - OMP_NUM_THREADS=2
+      - OMP_PROC_BIND=false
+      - OMP_PLACES=cores
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    networks:
+      - nester-network
+    logging:
+      <<: *cloudwatch-logging
+      options:
+        awslogs-group: ${CLOUDWATCH_LOG_GROUP:-/nester-ai/graviton-test}
+        awslogs-region: ${AWS_REGION:-us-west-2}
+        awslogs-stream: backend
+        awslogs-create-group: "true"
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-196061557238.dkr.ecr.us-west-2.amazonaws.com/nester-ai-graviton-test-frontend:latest}
+    container_name: nester-frontend
+    restart: always
+    expose:
+      - "80"
+    environment:
+      - BACKEND_URL=${PUBLIC_URL:-http://localhost:7860}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - nester-network
+    logging:
+      <<: *cloudwatch-logging
+      options:
+        awslogs-group: ${CLOUDWATCH_LOG_GROUP:-/nester-ai/graviton-test}
+        awslogs-region: ${AWS_REGION:-us-west-2}
+        awslogs-stream: frontend
+        awslogs-create-group: "true"
+
+networks:
+  nester-network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
