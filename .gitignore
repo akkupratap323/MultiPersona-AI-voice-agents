@@ -1,0 +1,144 @@
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+
+# Environment variables and sensitive configuration
+.env
+.env.local
+.env.*.local
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.env/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Logs
+*.log
+logs/
+
+# Database
+*.db
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp
+.tmp/
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+
+# Test scripts and temporary files
+test_*.sh
+check_*.sh
+*_test.sh
+
+# Documentation and reports (exclude from repo)
+PROJECT_OVERVIEW.md
+RAG_VERIFICATION_REPORT.md
+SSH_COMMANDS_REFERENCE.sh
+MONITORING.md
+MONITORING-MAC.md
+MULTI_USER_DEPLOYMENT.md
+DeploementAwsLightSail.txt
+
+# SSH keys and sensitive files
+*.pem
+*key*.pem
+LightsailDefaultKey*
+
+# Docker data volumes
+data/
+caddy_data/
+caddy_config/
+
+# Node modules
+node_modules/
+client/node_modules/
+
+# Build artifacts
+client/dist/
+client/build/
+
+# Documentation and analysis files (keep out of repo)
+*_ANALYSIS.md
+*_COMPARISON.md
+*_VISUALIZATION.md
+*_BLOG.md
+*_CLEANUP.md
+SYSTEM_ARCHITECTURE.md
+systempromtcontext.txt
+
+# Test and experimental files
+test_*.py
+*_test.py
+test_audio_samples/
+=*
+
+# ML Models and checkpoints (too large for git)
+pretrained_models/
+wav2vec2_checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Disabled/experimental services
+*.disabled
+*_backup.py
+*_old.py
+
+# Other project folders
+NesterConversationalBot/
+
+# HTML exports
+*.html
+!client/index.html
+!client/*.html
+.aider*
