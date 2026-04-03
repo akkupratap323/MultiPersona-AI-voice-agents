@@ -296,7 +296,7 @@ class LightRAGService(BaseRAGService):
                                     chunk = data.get("response", "")
                                     if chunk and first_chunk_time is None:
                                         first_chunk_time = time.time()
-                                        logger.info(f"⚡ RAG FIRST CHUNK: {first_chunk_time - start_time:.3f}s")
+                                        logger.debug(f"RAG first chunk: {first_chunk_time - start_time:.3f}s")
                                     full_response += chunk
                                 elif "error" in data:
                                     logger.error(f"LightRAG streaming error: {data.get('error')}")
@@ -311,7 +311,7 @@ class LightRAGService(BaseRAGService):
 
             end_time = time.time()
             total_time = end_time - start_time
-            logger.info(f"✅ RAG COMPLETE: Total={total_time:.3f}s, Length={len(full_response)} chars")
+            logger.debug(f"RAG complete: {total_time:.3f}s, {len(full_response)} chars")
 
             if "[no-context]" in full_response:
                 logger.warning("LightRAG: No context found for query")
