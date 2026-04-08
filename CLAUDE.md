@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**NesterVoiceAI** is a production-ready, real-time voice conversational assistant built by NesterLabs using the Pipecat framework (v0.0.98). It combines STT, LLM, TTS, RAG, emotion detection, and dynamic visual UI generation (A2UI) into a streaming voice pipeline with a 1-1.5 second end-to-end latency target.
+**PersonaAI** is a production-ready, real-time voice conversational assistant built using the Pipecat framework (v0.0.98). It combines STT, LLM, TTS, RAG, emotion detection, and dynamic visual UI generation (A2UI) into a streaming voice pipeline with a 1-1.5 second end-to-end latency target.
 
 ## Build & Run Commands
 

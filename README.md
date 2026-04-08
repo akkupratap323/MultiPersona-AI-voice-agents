@@ -1,4 +1,4 @@
-# NesterVoiceAI
+# PersonaAI
 
 **Production-ready real-time voice AI with multi-agent personas, hybrid emotion detection, live agent transfer, and dynamic visual UI — all in 1–1.5 second end-to-end latency.**
 
@@ -8,26 +8,17 @@
 
 ## Screenshots
 
-<table>
-  <tr>
-    <td align="center">
-      <img src="docs/images/screenshot1.png" alt="Agent Selection — Choose Your AI Agent carousel" width="100%"/>
-      <br/>
-      <strong>Agent Selection</strong> — carousel of 6 expert personas, each with a unique voice and role
-    </td>
-    <td align="center">
-      <img src="docs/images/screenshot2.png" alt="Live Conversation — animated orb with real-time subtitles" width="100%"/>
-      <br/>
-      <strong>Live Conversation</strong> — animated orb responds to voice, real-time subtitles, emotion-aware TTS
-    </td>
-  </tr>
-</table>
+<div align="center">
+  <img src="docs/images/screenshot1.png" width="85%"/>
+  <br/><br/>
+  <img src="docs/images/screenshot2.png" width="85%"/>
+</div>
 
 ---
 
 ## What Is This?
 
-NesterVoiceAI is a full-stack voice conversational assistant built on the [Pipecat](https://github.com/pipecat-ai/pipecat) framework (v0.0.98). You speak — the AI listens, understands your emotion, thinks, responds with the right voice, and optionally renders a live visual UI card — all in real time.
+PersonaAI is a full-stack voice conversational assistant built on the [Pipecat](https://github.com/pipecat-ai/pipecat) framework (v0.0.98). You speak — the AI listens, understands your emotion, thinks, responds with the right voice, and optionally renders a live visual UI card — all in real time.
 
 It supports **6 distinct AI agent personas**, each with their own voice, personality, and domain expertise. Agents are aware of each other and can **transfer mid-call** — the old agent says a connecting line, the new agent picks up with full context of your conversation.
 
@@ -163,7 +154,7 @@ Audio Output
 - **SmartTurn v3 ONNX** — replaces simple silence detection with ML end-of-turn prediction
 - **Non-blocking emotion** — background async tasks, zero pipeline latency impact
 - **Immediate barge-in** (`min_words=0`) — any speech stops TTS instantly
-- **CPU-only PyTorch** — fits 4GB RAM constraint on $7/month Lightsail instance
+- **CPU-only PyTorch** — fits 2GB RAM constraint on $12/month Lightsail instance
 - **Connection pooling** — shared `httpx` async client for LightRAG queries
 
 ---
@@ -362,11 +353,11 @@ client/src/
 ## Deployment
 
 **Live:** [https://3.6.92.112.nip.io/](https://3.6.92.112.nip.io/)  
-**Infrastructure:** AWS Lightsail — $7/month (1GB RAM, 2 vCPU, 40GB SSD)  
+**Infrastructure:** AWS Lightsail — $12/month (2GB RAM, 2 vCPU, 60GB SSD, 1.5TB transfer)  
 **CI/CD:** GitHub Actions → Docker build → push to GHCR → SSH pull + restart  
 **HTTPS:** Caddy with automatic Let's Encrypt via nip.io  
 **RAM management:** 2GB swap + INT8 quantization for model loading on constrained hardware
 
 ---
 
-*Built by NesterLabs*
+

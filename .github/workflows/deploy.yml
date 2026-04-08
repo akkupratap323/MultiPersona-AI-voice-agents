@@ -305,7 +305,7 @@ jobs:
                     condition: service_healthy
             
               backend:
-                image: ghcr.io/nesterlabs-ai/nesteraibot-backend:$IMAGE_TAG
+                image: ghcr.io/akkupratap323/nesteraibot-backend:$IMAGE_TAG
                 container_name: nester-backend
                 restart: always
                 env_file:
@@ -328,7 +328,7 @@ jobs:
                   - nester-network
             
               frontend:
-                image: ghcr.io/nesterlabs-ai/nesteraibot-frontend:$IMAGE_TAG
+                image: ghcr.io/akkupratap323/nesteraibot-frontend:$IMAGE_TAG
                 container_name: nester-frontend
                 restart: always
                 environment:
