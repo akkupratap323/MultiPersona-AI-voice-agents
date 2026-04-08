@@ -1,20 +1,194 @@
-# MultiPersona AI Voice Agents
+# NesterVoiceAI
 
-A production-ready, real-time multi-persona voice AI platform built on the [Pipecat](https://github.com/pipecat-ai/pipecat) framework. Five distinct AI agents — each with a unique voice, personality, and role — demonstrate how conversational voice AI can be deployed across different business use cases. Visitors have a natural voice conversation, get their questions answered, and can book a meeting with the team.
+**Production-ready real-time voice AI with multi-agent personas, hybrid emotion detection, live agent transfer, and dynamic visual UI — all in 1–1.5 second end-to-end latency.**
 
-**Live end-to-end latency: ~1–1.5 seconds**
+🔗 **Live Demo:** [https://3.6.92.112.nip.io/](https://3.6.92.112.nip.io/)
 
 ---
 
-## Agents
+## Screenshots
 
-| Agent | Name | Role | Language |
-|-------|------|------|----------|
-| Receptionist | Brooke | Front-desk welcome, routing, overview | English |
-| Customer Support | Blake | Product questions, troubleshooting, escalation | English |
-| Hinglish Support | Arushi | Support for the India market | Hinglish (Hindi + English) |
-| Sales Consultant | Morgan | Discovery, business value, lead qualification | English |
-| Technical Advisor | Daniel | Architecture deep-dives, integration, engineering | English |
+<table>
+  <tr>
+    <td align="center">
+      <img src="docs/images/screenshot1.png" alt="Agent Selection — Choose Your AI Agent carousel" width="100%"/>
+      <br/>
+      <strong>Agent Selection</strong> — carousel of 6 expert personas, each with a unique voice and role
+    </td>
+    <td align="center">
+      <img src="docs/images/screenshot2.png" alt="Live Conversation — animated orb with real-time subtitles" width="100%"/>
+      <br/>
+      <strong>Live Conversation</strong> — animated orb responds to voice, real-time subtitles, emotion-aware TTS
+    </td>
+  </tr>
+</table>
+
+---
+
+## What Is This?
+
+NesterVoiceAI is a full-stack voice conversational assistant built on the [Pipecat](https://github.com/pipecat-ai/pipecat) framework (v0.0.98). You speak — the AI listens, understands your emotion, thinks, responds with the right voice, and optionally renders a live visual UI card — all in real time.
+
+It supports **6 distinct AI agent personas**, each with their own voice, personality, and domain expertise. Agents are aware of each other and can **transfer mid-call** — the old agent says a connecting line, the new agent picks up with full context of your conversation.
+
+---
+
+## Core Features
+
+### 6 Expert AI Agents (Fully Interconnected)
+
+Every agent knows every other agent and can transfer you mid-call. Voice changes instantly. The new agent receives context of what you were discussing and picks up naturally — no awkward restarts.
+
+| Agent | Role | Specialty | Language |
+|-------|------|-----------|----------|
+| **Brooke** | General Assistant | Knows a bit about everything, connects you to the right person | English |
+| **Blake** | Problem Solver | Troubleshooting — tech issues, broken workflows, stuck decisions | English |
+| **Arushi** | Hinglish All-Rounder | Warm desi assistant — science to Bollywood, all in Hinglish | Hinglish |
+| **Morgan** | Business Strategist | Strategy, sales, fundraising, go-to-market, negotiation | English |
+| **Daniel** | Tech Expert | Coding, AI/ML, distributed systems, cloud infra, voice AI | English |
+| **Naya** | Lifestyle Coach | Health, fitness, travel, food, self-improvement, relationships | English |
+
+**How live agent transfer works:**
+1. Any agent can call `transfer_to_agent()` mid-conversation
+2. The old agent speaks a brief handoff line: *"Let me connect you with Daniel — this is his territory."*
+3. The LLM system prompt swaps silently to the new agent's persona
+4. TTS voice switches in real time via `tts.set_voice(voice_id)` — no reconnect, no reload
+5. The orb color, avatar, and UI accent all update on the frontend instantly
+6. The new agent picks up with full context: *"Brooke filled me in — you were asking about distributed caching, right?"*
+
+---
+
+### Hybrid Emotion Detection (Original Research)
+
+The core research contribution of this project: a **two-channel, weighted fusion emotion detection system** that runs non-blocking in the background — adding zero latency to the voice pipeline.
+
+#### Architecture
+
+```
+Audio Frames ──► MSP-PODCAST wav2vec2 ──► arousal, dominance, valence
+                    (70% weight)
+                                         \
+                                          ──► Weighted Fusion ──► Emotion Label ──► Voice Switch
+                                         /
+Text Transcription ──► Google Gemini ──► text sentiment
+                         (30% weight)
+```
+
+#### Channel 1: Audio Emotion (MSP-PODCAST wav2vec2)
+
+- **Model:** `audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim`
+- **Training data:** MSP-Podcast v1.7 — real podcast conversations (not acted speech)
+- **Output:** Dimensional emotions — arousal (0–1), dominance (0–1), valence (0–1)
+- **Why dimensional?** Categorical models (happy/sad/angry) trained on acted datasets fail on natural conversational speech. Dimensional models trained on real conversations generalize far better to real-world prosody.
+- **Optimizations for 4GB RAM / 2 vCPU Lightsail:**
+  - INT8 dynamic quantization → 2–3x faster inference, 75% smaller model footprint
+  - Thread tuning: 2 threads matches vCPU count, prevents CPU thrashing
+  - Intel MKL-DNN enabled for Lightsail's Intel Xeon CPUs
+  - Periodic GC to prevent memory fragmentation on long sessions
+
+#### Channel 2: Text Sentiment (Google Gemini Flash)
+
+- **Model:** Gemini 2.0 Flash via Google AI API
+- **Input:** Raw transcription text
+- **Output:** Sentiment label + confidence score
+- **Role:** Catches masked emotion — someone saying "I'm fine" in a frustrated voice. Audio captures the frustration; text captures the literal words. Fusion resolves the conflict.
+
+#### Fusion Logic
+
+```
+final_emotion = (audio_result × 0.7) + (text_result × 0.3)
+```
+
+Dynamic weight adjustment when confidence is low. Mismatch detection threshold at 0.8 — when audio and text strongly disagree (potential sarcasm), both signals are flagged and the system uses a conservative fallback.
+
+#### Dimensional → Voice Tone Mapping
+
+| Arousal | Valence | Mapped Tone |
+|---------|---------|-------------|
+| High | Low (negative) | frustrated |
+| High | High (positive) | excited |
+| Low | Low (negative) | sad |
+| Low | High (positive) | neutral / calm |
+
+#### Stability System
+
+- Emotions require **2-frame stability** before triggering a voice switch (prevents jitter from transient readings)
+- Detected emotions have a **10-second TTL** — stale readings don't persist across long silences
+- Voice switching is non-blocking: background async tasks, pipeline never waits for emotion inference
+
+---
+
+### Voice Pipeline (Pipecat)
+
+```
+Mic Input
+  │
+  ▼
+[Silero VAD] (conf=0.92 — only clear direct speech triggers)
+  │
+  ▼
+[Deepgram Nova-3 STT] (streaming, 300ms endpointing for SmartTurn)
+  │
+  ▼
+[ToneAwareProcessor] ← MSP-PODCAST + Gemini hybrid emotion (background async)
+  │
+  ▼
+[STTMuteFilter] (mutes STT during initial greeting — prevents self-interruption)
+  │
+  ▼
+[SmartTurn v3] (ONNX ML end-of-turn detection — replaces silence heuristics)
+  │
+  ▼
+[LLM Context Aggregator + DeepSeek V3]
+  │
+  ├─► call_rag_system()     → LightRAG → Answer + optional A2UI visual card
+  ├─► transfer_to_agent()   → Live agent swap (voice + persona + context)
+  └─► end_conversation()    → Farewell TTS + graceful disconnect
+  │
+  ▼
+[VisualHintProcessor] (word-by-word streaming to frontend for A2UI)
+  │
+  ▼
+[TextFilterProcessor] (strips markdown before TTS)
+  │
+  ▼
+[Cartesia Sonic-3 TTS] (word-level timestamps, emotion voice control)
+  │
+  ▼
+Audio Output
+```
+
+**Key design decisions:**
+- **Silero VAD over Deepgram VAD** — local control; Deepgram VAD caused false interruptions
+- **SmartTurn v3 ONNX** — replaces simple silence detection with ML end-of-turn prediction
+- **Non-blocking emotion** — background async tasks, zero pipeline latency impact
+- **Immediate barge-in** (`min_words=0`) — any speech stops TTS instantly
+- **CPU-only PyTorch** — fits 4GB RAM constraint on $7/month Lightsail instance
+- **Connection pooling** — shared `httpx` async client for LightRAG queries
+
+---
+
+### A2UI — Voice-Driven Visual Cards
+
+When the LLM answers a query through RAG, it can also trigger a **dynamic visual card** rendered in the frontend — no user action needed. The card appears alongside the voice response.
+
+Template selection uses a 3-tier system:
+1. **Explicit keyword match** — fast, pattern-based detection
+2. **Semantic match** — MiniLM sentence transformer for fuzzy intent matching
+3. **Fallback** — `simple-card` default
+
+Available templates: `simple-card`, `template-grid`, `timeline`, `contact-card`, `comparison-chart`, `stats-flow-layout`, `team-flip-cards`, `service-hover-reveal`, `magazine-hero`, `faq-accordion`, `image-gallery`, `video-gallery`, `sales-dashboard`
+
+---
+
+### RAG (Retrieval-Augmented Generation)
+
+Knowledge queries route through **LightRAG** — a graph-based RAG system that understands entity relationships, not just keyword similarity.
+
+- Streaming response via `/query/stream`
+- Non-streaming fallback via `/query`
+- Authenticated with `X-API-Key` header
+- Connection pooling via shared `httpx` async client
 
 ---
 
@@ -22,334 +196,177 @@ A production-ready, real-time multi-persona voice AI platform built on the [Pipe
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | [Pipecat](https://github.com/pipecat-ai/pipecat) v0.0.98 |
-| Backend | FastAPI + WebSocket |
-| Frontend | TypeScript + Vite |
-| STT | Deepgram Nova-3 |
-| LLM | Groq — `llama-3.1-8b-instant` |
-| TTS | Cartesia Sonic-3 |
-| VAD | Silero (local, no cloud dependency) |
-| End-of-turn | SmartTurn v3 ONNX ML model |
-| Emotion Detection | MSP-PODCAST wav2vec2 (70%) + Google Gemini text (30%) |
-| Visual UI | A2UI — dynamic component generation from voice |
-| Deployment | Docker + Caddy (auto-HTTPS), AWS Lightsail |
+| **Voice Pipeline** | Pipecat v0.0.98 |
+| **STT** | Deepgram Nova-3 |
+| **LLM** | DeepSeek V3 (`deepseek-chat`) |
+| **TTS** | Cartesia Sonic-3 (word timestamps + emotion control) |
+| **Audio Emotion** | MSP-PODCAST wav2vec2 (`audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim`) |
+| **Text Sentiment** | Google Gemini 2.0 Flash |
+| **Fusion** | Custom 70/30 weighted hybrid detector |
+| **RAG** | LightRAG (graph-based) |
+| **Turn Detection** | SmartTurn v3 ONNX |
+| **VAD** | Silero VAD (conf=0.92) |
+| **Backend** | FastAPI + uvicorn |
+| **Frontend** | TypeScript + Vite |
+| **Real-time Transport** | Pipecat RTVI WebSocket |
+| **Deployment** | Docker + Caddy (auto-HTTPS) on AWS Lightsail |
+| **CI/CD** | GitHub Actions → GHCR → SSH deploy |
 
 ---
 
-## Voice Pipeline
+## Architecture
 
 ```
-Audio Input
-    → Silero VAD (confidence 0.92)
-    → Deepgram Nova-3 STT (WebSocket streaming)
-    → SmartTurn v3 ONNX (end-of-turn detection)
-    → ToneAwareProcessor (emotion-aware voice switching)
-    → LLM Context Aggregator
-    → Groq LLM (llama-3.1-8b-instant)
-    → VisualHintProcessor (A2UI streaming)
-    → TextFilterProcessor (strips markdown before TTS)
-    → Cartesia TTS
-    → Audio Output
-```
-
----
-
-## Features
-
-- **5 AI Personas** — each with a unique voice, system prompt, personality, and use case scope
-- **Real-time voice** — WebSocket audio streaming, ~1–1.5s end-to-end latency
-- **Deepgram Nova-3 STT** — streaming transcription, multi-language support
-- **Cartesia Sonic-3 TTS** — low-latency neural voice synthesis
-- **SmartTurn v3** — ONNX ML model for accurate end-of-turn detection (replaces silence-based)
-- **Hybrid Emotion Detection** — non-blocking audio + text sentiment fusion, dynamic voice switching
-- **Barge-in** — any speech immediately stops TTS (min_words=0)
-- **Hinglish Support** — Hindi + English mixed language for the India market
-- **Appointment Booking** — full voice-driven booking flow with Tally.so integration
-- **A2UI Visual Responses** — dynamic UI components (cards, grids, timelines) generated from voice
-- **Knowledge Graph** — Sigma.js + Graphology visualization in frontend
-- **Multi-session** — up to 20 concurrent isolated sessions
-- **Docker deployment** — Caddy auto-HTTPS, CPU-only PyTorch, INT8 quantization
-
----
-
-## Project Structure
-
-```
-MultiPersona-AI-voice-agents/
-├── app/
-│   ├── config/
-│   │   ├── config.yaml          # Main configuration (all settings + persona prompts)
-│   │   └── loader.py            # YAML loader with ${ENV_VAR} substitution
-│   ├── core/
-│   │   ├── voice_assistant.py   # Pipeline orchestrator
-│   │   └── server.py            # WebSocket session manager
-│   ├── processors/
-│   │   ├── tone_aware_processor.py       # Emotion detection + voice switching
-│   │   ├── text_filter_processor.py      # Strips markdown before TTS
-│   │   ├── visual_hint_processor.py      # Word-by-word A2UI streaming
-│   │   └── smart_interruption_processor.py
-│   ├── services/
-│   │   ├── conversation.py      # LLM context, function calling, appointment booking
-│   │   ├── groq_llm_service.py  # Groq wrapper (merges consecutive user messages)
-│   │   ├── stt.py               # Deepgram STT service
-│   │   ├── tts.py               # Cartesia TTS service
-│   │   ├── msp_emotion_detector.py      # wav2vec2 audio emotion
-│   │   ├── llm_text_sentiment.py        # Gemini text sentiment
-│   │   ├── hybrid_emotion_detector.py   # 70/30 fusion
-│   │   ├── tally_submission.py          # Appointment booking
-│   │   └── a2ui/                        # Visual UI generation system
-│   └── main.py                  # FastAPI entrypoint (port 7860)
-├── client/
-│   ├── src/
-│   │   ├── app.ts               # Main frontend app
-│   │   └── components/
-│   │       ├── a2ui/            # A2UI visual renderers
-│   │       └── KnowledgeGraphWidget/    # Sigma.js graph viz
-│   ├── public/
-│   │   └── config.js            # Runtime frontend config
-│   └── index.html
-├── deployment/
-│   └── docker/
-│       ├── docker-compose.https.yml
-│       └── Caddyfile
-├── tests/
-│   ├── unit/
-│   └── integration/
-└── .env.example
+Browser (TypeScript/Vite)
+    │
+    │  WebSocket (/ws) — Pipecat RTVI Protocol
+    │
+FastAPI (app/main.py) — port 7860
+    │
+    ├─ Pipecat Pipeline (per session)
+    │   ├─ STT: Deepgram Nova-3
+    │   ├─ LLM: DeepSeek V3
+    │   ├─ TTS: Cartesia Sonic-3
+    │   ├─ Emotion: HybridEmotionDetector (background async)
+    │   │   ├─ MSP-PODCAST wav2vec2 (audio channel, 70%)
+    │   │   └─ Gemini Flash (text channel, 30%)
+    │   ├─ Turn: SmartTurn v3 ONNX
+    │   └─ A2UI: VisualHintProcessor → frontend card render
+    │
+    ├─ Session Management
+    │   ├─ ConnectionManager (max 20 concurrent sessions)
+    │   ├─ Per-session VoiceAssistant isolation
+    │   └─ Live agent transfer (in-session swap, no reconnect)
+    │
+    └─ External Services
+        ├─ LightRAG (graph RAG server)
+        ├─ Deepgram (STT streaming API)
+        ├─ Cartesia (TTS API)
+        └─ Google AI (Gemini text sentiment)
 ```
 
 ---
 
-## Quick Start
+## Running Locally
 
 ### Prerequisites
 
 - Python 3.10+
 - Node.js 18+
-- API keys (see below)
+- API keys: `DEEPGRAM_API_KEY`, `DEEPSEEK_API_KEY`, `CARTESIA_API_KEY`, `CARTESIA_VOICE_ID`, `GOOGLE_API_KEY`, `LIGHTRAG_API_KEY`, `LIGHTRAG_BASE_URL`
 
-### 1. Clone and set up backend
+### Backend
 
 ```bash
-git clone https://github.com/yourusername/MultiPersona-AI-voice-agents.git
-cd MultiPersona-AI-voice-agents
-
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-```
-
-### 2. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your keys:
-
-```bash
-# Required
-DEEPGRAM_API_KEY=your_deepgram_key       # deepgram.com
-GROQ_API_KEY=your_groq_key               # console.groq.com (free tier available)
-CARTESIA_API_KEY=your_cartesia_key       # play.cartesia.ai
-CARTESIA_VOICE_ID=your_voice_id          # from play.cartesia.ai/voices
-GOOGLE_API_KEY=your_google_key           # for Gemini text sentiment
-
-# Optional
-TALLY_API_KEY=your_tally_key             # for appointment booking
-```
-
-### 3. Run the backend
-
-```bash
+cp .env.example .env          # Fill in your API keys
 export PYTHONPATH=$(pwd)
-python app/main.py
-# → http://localhost:7860
+python app/main.py             # → http://localhost:7860
 ```
 
-### 4. Run the frontend
+### Frontend
 
 ```bash
 cd client
 npm install
-npm run dev
-# → http://localhost:5173
+npm run dev                    # → http://localhost:5173
+npm run build                  # Production build
+npm run typecheck              # TypeScript type checking
 ```
 
-Open `http://localhost:5173`, select an agent, and start talking.
+### Tests
 
----
-
-## Configuration
-
-All settings live in `app/config/config.yaml`. Environment variables are injected via `${VAR_NAME}` syntax.
-
-**Key sections:**
-
-```yaml
-# STT
-stt:
-  provider: "deepgram"
-  config:
-    model: "nova-3"
-    language: "en"
-
-# LLM
-conversation:
-  llm:
-    provider: "groq"
-    model: "llama-3.1-8b-instant"
-
-# TTS
-tts:
-  provider: "cartesia"
-  config:
-    model: "sonic-3"
-
-# Persona system
-personas:
-  default_persona: "receptionist"
-  agents:
-    receptionist:
-      name: "Brooke"
-      voice_id: "${CARTESIA_VOICE_ID}"
-      # ... system_prompt_override, greetings, etc.
-
-# VAD
-server:
-  vad:
-    confidence: 0.92
-    stop_secs: 1.0
-
-# SmartTurn v3
-  smart_turn:
-    enabled: true
-
-# Emotion detection
-  emotion_detection_enabled: true
+```bash
+pytest tests/                  # All tests
+pytest tests/unit/             # Unit tests only
+pytest tests/integration/      # Integration tests only
 ```
 
 ---
 
-## Emotion Detection
-
-Non-blocking hybrid system — adds zero latency to the voice pipeline:
-
-- **Audio channel**: MSP-PODCAST wav2vec2 model runs in a background async task (70% weight)
-- **Text channel**: Google Gemini analyzes LLM response sentiment (30% weight)
-- **Fusion**: Weighted combination with 10s emotion TTL and 2-frame stability before voice switch
-- **Result**: TTS voice characteristics adjust dynamically based on detected emotion
-
----
-
-## A2UI (Agentic Visual UI)
-
-Generates visual UI components in real-time from voice queries — no clicks required:
-
-- **3-tier template selection**: explicit keyword → semantic MiniLM similarity → fallback
-- **Template types**: contact cards, service grids, timelines, comparison charts, FAQ accordions, team profiles, stats dashboards
-- **Streaming**: word-by-word LLM output streamed to frontend via `VisualHintProcessor`
-
----
-
-## Appointment Booking
-
-Full voice-driven booking flow:
-
-1. Agent offers appointment at farewell (or when user requests it)
-2. Collects name and email conversationally
-3. Confirms by spelling out email character-by-character
-4. Submits to Tally.so via `submit_appointment(first_name, last_name, email)`
-5. Ends session with `end_conversation()`
-
----
-
-## API Endpoints
-
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/ws` | WebSocket | Real-time voice communication |
-| `/health` | GET | Health check |
-| `/status` | GET | Server and service status |
-| `/connect` | POST | Get WebSocket URL and session config |
-
----
-
-## Deployment
-
-### Docker (with HTTPS)
+## Docker Deployment
 
 ```bash
 cd deployment/docker
 docker-compose -f docker-compose.https.yml up -d
 ```
 
-Set your domain in `.env`:
-```bash
-DOMAIN=yourdomain.com
-PUBLIC_URL=https://yourdomain.com
-```
-
-Caddy handles SSL certificates automatically.
-
-### Public access via ngrok (for testing)
-
-```bash
-# Terminal 1
-python app/main.py
-
-# Terminal 2
-ngrok http 7860
-```
-
-Update `client/public/config.js` with the ngrok URL.
-
-### CI/CD
-
-GitHub Actions deploys to AWS Lightsail on push to `main`. See `.github/workflows/deploy.yml`.
-
-**Infrastructure**: $7/month Lightsail (1GB RAM, 2 vCPU), CPU-only PyTorch, INT8 quantization, 2GB swap.
+Caddy handles auto-HTTPS (Let's Encrypt via nip.io). Backend on port 7860, frontend on 80/443.
 
 ---
 
-## Running Tests
+## Configuration
 
-```bash
-pytest tests/                   # All tests
-pytest tests/unit/              # Unit tests only
-pytest tests/integration/       # Integration tests only
+All settings live in `app/config/config.yaml`, loaded at startup with `${ENV_VAR}` substitution from `.env`.
+
+Key sections:
+
+| Section | What it controls |
+|---------|-----------------|
+| `conversation.system_prompt` | Default agent (Brooke) system prompt |
+| `personas.agents` | All 6 agent definitions — voice ID, personality, greetings |
+| `server.vad` | VAD confidence and volume thresholds |
+| `server.smart_turn` | SmartTurn ONNX timeout and CPU settings |
+| `server.emotion_detection_enabled` | Toggle hybrid emotion detection |
+| `a2ui` | Template tier mode, confidence threshold, streaming |
+| `stt.config` | Deepgram streaming settings, corrections |
+
+---
+
+## Project Structure
+
 ```
+app/
+├── main.py                          # FastAPI entrypoint
+├── core/
+│   ├── voice_assistant.py           # Pipeline assembly + agent transfer wiring
+│   └── server.py                    # WebSocket server + session management
+├── services/
+│   ├── conversation.py              # LLM context, function calling, agent transfer logic
+│   ├── msp_emotion_detector.py      # MSP-PODCAST wav2vec2 audio emotion (INT8 quantized)
+│   ├── hybrid_emotion_detector.py   # 70/30 fusion of audio + text sentiment
+│   ├── llm_text_sentiment.py        # Google Gemini text sentiment
+│   ├── rag.py                       # LightRAG graph RAG integration
+│   └── a2ui/                        # Agentic UI — template selection + rendering
+├── processors/
+│   ├── tone_aware_processor.py      # Emotion detection + Cartesia voice switching
+│   ├── smart_interruption.py        # Context-aware barge-in (disabled — StartFrame bug)
+│   └── text_filter.py               # Strips markdown before TTS
+└── config/
+    ├── config.yaml                  # All configuration (env var substitution)
+    └── loader.py                    # Config loader with ${VAR} substitution
 
-```bash
-cd client
-npm run typecheck               # TypeScript type checking
-npm run build                   # Production build
+client/src/
+├── app.ts                           # Main app — RTVI client, agent transfer, orb, UI
+├── components/
+│   ├── EmotionAnalysisWidget/       # Live emotion visualization panel
+│   ├── KnowledgeGraphWidget/        # RAG knowledge graph (Sigma.js + Graphology)
+│   ├── SynchronizedAnalysisWidget/  # Topic flow analysis
+│   └── a2ui/                        # A2UI visual card renderers
+└── style.css                        # Agent color theming + transfer animations
 ```
 
 ---
 
 ## Known Limitations
 
-- `SmartInterruptionProcessor` is currently disabled (StartFrame bug)
-- AIC Speech Enhancement disabled (SDK v1/v2 version mismatch)
-- MSP-PODCAST model may fail with newer versions of `transformers` (falls back to text-only emotion)
+- `SmartInterruptionProcessor` disabled — StartFrame ordering bug (fix in progress)
+- AIC Speech Enhancement disabled — SDK v1/v2 mismatch
+- MSP-PODCAST model falls back to text-only emotion on newer `transformers` versions
 - INT8 quantization not supported on Apple Silicon (M1/M2/M3) — skipped automatically
+- Koala noise suppression requires paid API key; WebRTC AEC used as free fallback
 
 ---
 
-## License
+## Deployment
 
-MIT License — see [LICENSE](LICENSE) for details.
+**Live:** [https://3.6.92.112.nip.io/](https://3.6.92.112.nip.io/)  
+**Infrastructure:** AWS Lightsail — $7/month (1GB RAM, 2 vCPU, 40GB SSD)  
+**CI/CD:** GitHub Actions → Docker build → push to GHCR → SSH pull + restart  
+**HTTPS:** Caddy with automatic Let's Encrypt via nip.io  
+**RAM management:** 2GB swap + INT8 quantization for model loading on constrained hardware
 
 ---
 
-## Acknowledgments
-
-- [Pipecat](https://github.com/pipecat-ai/pipecat) — Real-time AI voice pipeline framework
-- [Deepgram](https://deepgram.com) — Speech-to-text (Nova-3)
-- [Groq](https://groq.com) — Ultra-fast LLM inference
-- [Cartesia](https://cartesia.ai) — Low-latency neural TTS (Sonic-3)
-- [Google Gemini](https://ai.google.dev) — Text sentiment analysis
-- [Silero VAD](https://github.com/snakers4/silero-vad) — Voice activity detection
-- [Sigma.js](https://sigmajs.org) + [Graphology](https://graphology.github.io) — Knowledge graph visualization
+*Built by NesterLabs*

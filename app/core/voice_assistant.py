@@ -23,7 +23,7 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.filters.stt_mute_filter import STTMuteFilter, STTMuteConfig, STTMuteStrategy
-from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
+from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor, RTVIServerMessageFrame
 from pipecat.processors.aggregators.sentence import SentenceAggregator
 from pipecat.transports.base_transport import BaseTransport
 
@@ -218,11 +218,23 @@ class VoiceAssistant:
             llm_config["system_prompt"] = self.persona_config["system_prompt_override"]
             logger.info(f"🎭 Persona system prompt override applied ({len(self.persona_config['system_prompt_override'])} chars)")
 
+        # Determine current persona ID for agent roster
+        current_persona_id = ""
+        personas_config = self.config.get("personas", {})
+        if self.persona_config:
+            # Find the persona_id that matches this config
+            for pid, pcfg in personas_config.get("agents", {}).items():
+                if pcfg.get("name") == self.persona_config.get("name"):
+                    current_persona_id = pid
+                    break
+
         self.conversation_manager = ConversationManager(
             input_analyzer=self.input_analyzer,
             llm_config=llm_config,
             language_config=language_config,
             smart_turn_config=smart_turn_config,
+            personas_config=personas_config,
+            current_persona_id=current_persona_id,
         )
 
         logger.info("All services initialized successfully")
@@ -257,6 +269,11 @@ class VoiceAssistant:
 
         # Set up TTS service in conversation manager for function call feedback
         self.conversation_manager.set_tts_service(tts)
+
+        # Wire up agent transfer callback for live persona switching
+        self.conversation_manager.set_agent_transfer_callback(
+            self._handle_agent_transfer
+        )
 
         # Connect TTS to tone processor for dynamic voice switching
         self.tone_processor.set_tts_service(tts)
@@ -470,6 +487,47 @@ class VoiceAssistant:
         await self.runner.run(self.task)
 
         logger.info("Voice Assistant stopped")
+
+    async def _handle_agent_transfer(self, agent_id: str, persona_config: Dict[str, Any]) -> None:
+        """Handle live agent transfer by switching TTS voice and notifying frontend.
+
+        Args:
+            agent_id: The target agent's ID
+            persona_config: The target agent's configuration dict
+        """
+        import os
+
+        # 1. Switch TTS voice
+        new_voice_id = persona_config.get("voice_id", "")
+        if new_voice_id.startswith("${") and new_voice_id.endswith("}"):
+            env_var = new_voice_id[2:-1]
+            new_voice_id = os.getenv(env_var, "")
+
+        if new_voice_id and self.tts:
+            self.tts.set_voice(new_voice_id)
+            logger.info(f"🔄 TTS voice switched to {new_voice_id[:8]}... for {persona_config.get('name', agent_id)}")
+
+        # 2. Notify frontend via RTVI data message
+        agent_name = persona_config.get("name", agent_id)
+        agent_role = persona_config.get("role", "Agent")
+        agent_avatar = persona_config.get("avatar", "")
+
+        transfer_message = RTVIServerMessageFrame(
+            data={
+                "message_type": "agent_transfer",
+                "agent_id": agent_id,
+                "name": agent_name,
+                "role": agent_role,
+                "avatar": agent_avatar,
+            }
+        )
+
+        if self.task:
+            await self.task.queue_frame(transfer_message)
+            logger.info(f"🔄 Agent transfer notification sent to frontend: {agent_name}")
+
+        # Update persona_config reference
+        self.persona_config = persona_config
 
     def get_service_status(self) -> Dict[str, Any]:
         """Get the status of all services.

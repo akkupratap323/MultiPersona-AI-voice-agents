@@ -259,6 +259,7 @@ class VoiceScannerApp {
     indian_support: '#ff4da6',
     sales: '#ffc107',
     technical: '#4da6ff',
+    lifestyle: '#e040fb',
   };
 
   /**
@@ -276,11 +277,12 @@ class VoiceScannerApp {
 
     // Fallback persona data
     const fallbackPersonas = [
-      { id: 'receptionist', name: 'Brooke', role: 'Receptionist', description: 'Confident and conversational front-desk assistant', avatar: '/personas/receptionist.webp', tags: ['English', 'Female', 'Professional'] },
-      { id: 'customer_support', name: 'Blake', role: 'Customer Support', description: 'Energetic and engaging support specialist', avatar: '/personas/customer-support.webp', tags: ['English', 'Male', 'Support'] },
-      { id: 'indian_support', name: 'Arushi', role: 'Hinglish Support', description: 'Warm and helpful Hinglish-speaking support agent', avatar: '/personas/indian-support.webp', tags: ['Hinglish', 'Female', 'India'] },
-      { id: 'sales', name: 'Morgan', role: 'Sales Consultant', description: 'Polished and professional sales advisor', avatar: '/personas/sales.webp', tags: ['English', 'Female', 'Sales'] },
-      { id: 'technical', name: 'Daniel', role: 'Technical Advisor', description: 'Clear and crisp technical expert in AI and voice systems', avatar: '/personas/technical.webp', tags: ['English', 'Male', 'Technical'] },
+      { id: 'receptionist', name: 'Brooke', role: 'General Assistant', description: 'Sharp and friendly generalist — knows a bit about everything', avatar: '/personas/receptionist.webp', tags: ['English', 'Female', 'Generalist'] },
+      { id: 'customer_support', name: 'Blake', role: 'Problem Solver', description: 'Calm and methodical troubleshooter — if it\'s broken, Blake will fix it', avatar: '/personas/customer-support.webp', tags: ['English', 'Male', 'Problem Solver'] },
+      { id: 'indian_support', name: 'Arushi', role: 'Hinglish Assistant', description: 'Warm and witty Hinglish-speaking all-rounder', avatar: '/personas/indian-support.webp', tags: ['Hinglish', 'Female', 'All-Rounder'] },
+      { id: 'sales', name: 'Morgan', role: 'Business Strategist', description: 'Sharp business mind — strategy, growth, and getting deals done', avatar: '/personas/sales.webp', tags: ['English', 'Female', 'Business'] },
+      { id: 'technical', name: 'Daniel', role: 'Tech Expert', description: 'Deep technical expert — coding, systems, AI, and infrastructure', avatar: '/personas/technical.webp', tags: ['English', 'Male', 'Technical'] },
+      { id: 'lifestyle', name: 'Naya', role: 'Lifestyle Coach', description: 'Health, fitness, travel, food, and living well', avatar: '/personas/lifestyle.webp', tags: ['English', 'Female', 'Lifestyle'] },
     ];
 
     let personas = fallbackPersonas;
@@ -448,6 +450,7 @@ class VoiceScannerApp {
     indian_support: '255, 77, 166',
     sales: '255, 193, 7',
     technical: '77, 166, 255',
+    lifestyle: '224, 64, 251',
   };
 
   /** Convert hex color to "r, g, b" string for use in rgba() CSS vars */
@@ -2323,6 +2326,81 @@ class VoiceScannerApp {
   }
 
   /**
+   * Handle live agent transfer: update UI to show the new active agent
+   */
+  private handleAgentTransfer(data: { agent_id: string; name: string; role: string; avatar: string }): void {
+    this.log(`Agent transfer: ${data.name} (${data.role})`);
+    this.addTerminalMessage(`agent.transfer('${data.agent_id}');`, 'command');
+    this.addTerminalMessage(`Connected to ${data.name} - ${data.role}`, 'regular');
+
+    // Update the selected persona tracking
+    this.selectedPersonaId = data.agent_id;
+
+    // Apply agent accent color globally (same logic as selectPersona)
+    const color = VoiceScannerApp.AGENT_COLORS[data.agent_id] || '#4da6ff';
+    const colorRgb = VoiceScannerApp.AGENT_COLORS_RGB?.[data.agent_id] || '77, 166, 255';
+    document.documentElement.style.setProperty('--accent-hero', color);
+    document.documentElement.style.setProperty('--accent-hero-rgb', colorRgb);
+
+    // Update orb colors
+    const orbSecondary = VoiceScannerApp.darkenHex(color, 0.4);
+    document.documentElement.style.setProperty('--orb-primary', color);
+    document.documentElement.style.setProperty('--orb-primary-rgb', VoiceScannerApp.hexToRgb(color));
+    document.documentElement.style.setProperty('--orb-secondary', orbSecondary);
+    document.documentElement.style.setProperty('--orb-secondary-rgb', VoiceScannerApp.hexToRgb(orbSecondary));
+
+    // Update orb gradient
+    if (this.liquidBlob) {
+      this.liquidBlob.style.background = `linear-gradient(135deg, ${color} 0%, #2563eb 50%, #ffffff 100%)`;
+    }
+
+    // Update agent identity elements on the talking page
+    const agentName = document.getElementById('agent-name');
+    const agentAvatar = document.getElementById('agent-avatar-img') as HTMLImageElement | null;
+    const agentStatus = document.getElementById('agent-status');
+    if (agentName) agentName.textContent = data.name;
+    if (agentAvatar && data.avatar) agentAvatar.src = data.avatar;
+    if (agentStatus) agentStatus.textContent = data.role;
+
+    // Sync Mission Control header
+    const mcName = document.getElementById('mc-agent-name');
+    if (mcName) mcName.textContent = data.name;
+
+    // Tint MC mini orb with agent color
+    const mcOrbGlow = document.querySelector('.mc-orb-glow') as HTMLElement | null;
+    if (mcOrbGlow) mcOrbGlow.style.background = `linear-gradient(135deg, ${color}, #7c3aed)`;
+    const mcOrbCore = document.querySelector('.mc-orb-core') as HTMLElement | null;
+    if (mcOrbCore) mcOrbCore.style.background = `linear-gradient(135deg, ${color}, #818cf8)`;
+
+    // Update the agent indicator badge
+    let indicator = document.getElementById('active-agent-indicator');
+    if (!indicator) {
+      indicator = document.createElement('div');
+      indicator.id = 'active-agent-indicator';
+      indicator.style.cssText = `
+        position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+        padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 600;
+        letter-spacing: 0.5px; z-index: 1000; transition: all 0.4s ease;
+        backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1);
+        animation: agentTransferIn 0.5s ease;
+      `;
+      document.body.appendChild(indicator);
+    }
+    indicator.style.background = `${color}22`;
+    indicator.style.color = color;
+    indicator.style.borderColor = `${color}44`;
+    indicator.textContent = `${data.name} - ${data.role}`;
+
+    // Flash the indicator to draw attention
+    indicator.style.animation = 'none';
+    void indicator.offsetHeight; // force reflow
+    indicator.style.animation = 'agentTransferIn 0.5s ease';
+
+    // Show a notification
+    this.showNotification(`TRANSFERRED TO ${data.name.toUpperCase()}`);
+  }
+
+  /**
    * Add emotion dot to timeline
    */
   private addEmotionToTimeline(emotion: string, _emoji?: string): void {
@@ -3395,6 +3473,9 @@ class VoiceScannerApp {
                   } else {
                     console.warn('[A2UI] Invalid update format');
                   }
+                  break;
+                case 'agent_transfer':
+                  this.handleAgentTransfer(messageData);
                   break;
               }
             } catch (e) {

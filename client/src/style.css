@@ -3600,3 +3600,17 @@ body.a2ui-panel-visible .live-subtitle.visible {
   .persona-nav-next { right: 0.25rem; }
   .persona-nav-btn { padding: 0.75rem; }
 }
+
+/* ===== Agent Transfer Indicator ===== */
+@keyframes agentTransferIn {
+  0% { opacity: 0; transform: translateX(-50%) translateY(-10px) scale(0.9); }
+  60% { opacity: 1; transform: translateX(-50%) translateY(2px) scale(1.02); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+}
+
+#active-agent-indicator {
+  font-family: 'Inter', 'SF Pro Display', system-ui, sans-serif;
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+}
