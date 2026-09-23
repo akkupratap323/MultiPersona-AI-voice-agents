@@ -10,16 +10,14 @@ import re
 import unicodedata
 from typing import Any, Dict, List, Tuple
 
-from deepgram import LiveOptions
 from loguru import logger
 from pipecat.frames.frames import Frame, TranscriptionFrame
 from pipecat.processors.frame_processor import FrameDirection
-from pipecat.services.deepgram.stt import DeepgramSTTService
-from pipecat.services.whisper.stt import WhisperSTTService
+from pipecat.services.deepgram.flux.stt import DeepgramFluxSTTService
 from pipecat.transcriptions.language import Language
 
 
-class TextNormalizedDeepgramSTTService(DeepgramSTTService):
+class TextNormalizedDeepgramFluxSTTService(DeepgramFluxSTTService):
     """Deepgram STT service with Unicode normalization and config-driven STT corrections.
 
     Extends the base Deepgram STT service to:
@@ -30,17 +28,15 @@ class TextNormalizedDeepgramSTTService(DeepgramSTTService):
     {"pattern": "regex", "replacement": "text"} entries, compiled once at init time.
     """
 
-    def __init__(self, api_key: str, live_options: LiveOptions = None,
-                 corrections: List[Dict] = None, **kwargs):
+    def __init__(self, api_key: str, corrections: List[Dict] = None, **kwargs):
         """Initialize the normalized Deepgram STT service.
 
         Args:
             api_key: Deepgram API key
-            live_options: Deepgram live options configuration
             corrections: List of {"pattern": "regex", "replacement": "text"} dicts
             **kwargs: Additional arguments for the base service
         """
-        super().__init__(api_key=api_key, live_options=live_options, **kwargs)
+        super().__init__(api_key=api_key, **kwargs)
         self._corrections: List[Tuple[re.Pattern, str]] = []
         if corrections:
             for entry in corrections:
@@ -156,55 +152,50 @@ class SpeechToTextService:
             ValueError: If provider is unsupported or API key is missing
         """
         if self.stt_provider == "whisper":
+            from pipecat.services.whisper.stt import WhisperSTTService
+
             self.stt_service = WhisperSTTService(
                 device=self.config.get("device", "cpu"),
                 model=self.config.get("model", "small"),
                 no_speech_prob=self.config.get("no_speech_prob", 0.3),
             )
-        elif self.stt_provider == "deepgram":
+        elif self.stt_provider in {"deepgram", "deepgram_flux"}:
             api_key = self.config.get("api_key")
             if not api_key:
                 raise ValueError("Deepgram API key is required")
 
             language = self.config.get("language", "en")
-            detect_language = self.config.get("detect_language", False)
-
-            live_options_config = {
-                "model": self.config.get("model", "nova-2"),
-                "smart_format": self.config.get("smart_format", True),
-                "filler_words": self.config.get("filler_words", False),
-                "punctuate": self.config.get("punctuate", True),
-                "endpointing": self.config.get("endpointing", 500),
-                "utterance_end_ms": self.config.get("utterance_end_ms", 1200),
-                "interim_results": self.config.get("interim_results", True),
-                # CRITICAL: Disable Deepgram VAD events to prevent false interruptions
-                # The local Silero VAD handles speech detection with tuned parameters
-                # Deepgram VAD was causing bot to be cut off on deployed version
-                "vad_events": self.config.get("vad_events", False),
-            }
-
-            # NOTE: Deepgram's `keywords` param breaks Nova-3 WebSocket connections.
-            # Proper noun correction is handled via config-driven post-processing
-            # in TextNormalizedDeepgramSTTService._apply_corrections() instead.
             corrections = self.config.get("corrections", [])
-
-            if detect_language:
-                live_options_config["detect_language"] = True
-            elif language == "multi" or language == "hi" or self.config.get("support_hinglish", False):
-                # Multi-language mode: Hindi + English (Hinglish) support via Deepgram Nova-3
-                live_options_config["language"] = "multi"
-            else:
-                language_mapping = {"en": Language.EN, "hi": Language.HI}
-                live_options_config["language"] = language_mapping.get(language, Language.EN)
-
-            live_options = LiveOptions(**live_options_config)
+            multilingual = (
+                language in {"multi", "hi"}
+                or self.config.get("detect_language", False)
+                or self.config.get("support_hinglish", False)
+            )
+            model = "flux-general-multi" if multilingual else self.config.get(
+                "model", "flux-general-en"
+            )
+            language_hints = [Language.EN, Language.HI] if multilingual else None
+            settings = DeepgramFluxSTTService.Settings(
+                model=model,
+                language_hints=language_hints,
+                eot_threshold=self.config.get("eot_threshold", 0.7),
+                eot_timeout_ms=self.config.get("eot_timeout_ms", 5000),
+                min_confidence=self.config.get("min_confidence", 0.3),
+                keyterm=self.config.get("keyterms", []),
+                numerals=self.config.get("numerals", True),
+            )
             logger.info(
-                f"Deepgram LiveOptions: smart_format={live_options_config['smart_format']}, "
-                f"endpointing={live_options_config['endpointing']}ms"
+                f"Deepgram Flux: model={model}, "
+                f"eot_threshold={settings.eot_threshold}, "
+                f"eot_timeout_ms={settings.eot_timeout_ms}"
             )
 
-            self.stt_service = TextNormalizedDeepgramSTTService(
-                api_key=api_key, live_options=live_options, corrections=corrections
+            self.stt_service = TextNormalizedDeepgramFluxSTTService(
+                api_key=api_key,
+                corrections=corrections,
+                settings=settings,
+                sample_rate=self.config.get("sample_rate", 16000),
+                should_interrupt=True,
             )
         else:
             raise ValueError(f"Unsupported STT provider: {self.stt_provider}")

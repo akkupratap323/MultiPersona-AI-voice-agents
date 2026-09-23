@@ -1,7 +1,7 @@
 """
 Subtitle Sync Processor - Emits streaming_text subtitles from TTS word frames.
 
-In pipecat 0.0.98, TTS pushes TTSTextFrame DOWNSTREAM with PTS timestamps
+Pipecat TTS pushes TTSTextFrame downstream with PTS timestamps
 before audio reaches the transport. Words arrive as a burst before audio plays.
 
 This processor emits each word immediately with its pts_offset (seconds from

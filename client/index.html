@@ -95,10 +95,6 @@
     <!-- Top Navigation Bar -->
     <header class="session-header" id="session-header">
       <div class="session-brand"></div>
-      <div class="session-info">
-        <div class="session-status-dot"></div>
-        <span class="session-timer" id="session-timer">00:00</span>
-      </div>
     </header>
 
     <!-- Mission Control Peek Header (mini orb + agent name + live status) -->
@@ -108,12 +104,12 @@
           <div class="mc-orb-glow"></div>
           <div class="mc-orb-core"></div>
         </div>
-        <div class="mc-agent-info">
-          <span class="mc-agent-name" id="mc-agent-name">Agent</span>
+        <div class="mc-live-summary">
           <div class="mc-live-badge">
             <span class="mc-live-dot"></span>
-            <span class="mc-live-text">Live</span>
+            <span class="mc-live-text">Live intelligence</span>
           </div>
+          <span class="mc-live-caption">Conversation signals updating in real time</span>
         </div>
       </div>
     </header>
@@ -185,7 +181,11 @@
           <div class="mc-col-center">
             <div class="dashboard-card mc-card-emotion" id="dashboard-card-4">
               <div class="dashboard-card-header">
-                <span class="dashboard-card-label">EMOTION ANALYSIS</span>
+                <div class="emotion-card-heading">
+                  <span class="dashboard-card-label">EMOTION ANALYSIS</span>
+                  <span class="emotion-card-subtitle">Live vocal signal map</span>
+                </div>
+                <span class="emotion-focus-hint">EXPAND <span aria-hidden="true">↗</span></span>
               </div>
               <div class="dashboard-card-body">
                 <div id="emotion-analysis-root" class="dashboard-card-inner emotion-analysis-topic"></div>
@@ -195,10 +195,6 @@
         </div>
         <!-- Session Stats Bar -->
         <div class="mc-stats-bar" id="mc-stats-bar">
-          <div class="mc-stat-card">
-            <span class="mc-stat-label">Duration</span>
-            <span class="mc-stat-value" id="mc-stat-duration">00:00</span>
-          </div>
           <div class="mc-stat-card">
             <span class="mc-stat-label">Messages</span>
             <span class="mc-stat-value" id="mc-stat-messages">0</span>
@@ -235,8 +231,6 @@
         <div class="agent-avatar-wrap" id="agent-avatar-wrap">
           <img src="/personas/receptionist.webp" alt="" class="agent-avatar-img" id="agent-avatar-img" />
         </div>
-        <h2 class="agent-name" id="agent-name">Brooke</h2>
-        <span class="agent-status" id="agent-status">Listening...</span>
       </div>
 
       <!-- Liquid Metallic AI Orb -->
@@ -291,6 +285,7 @@
             <div class="pill-divider hide-on-mobile"></div>
             <!-- Peek -->
             <button type="button" class="pill-btn pill-btn-peek hide-on-mobile" id="control-peak" aria-label="Peek view">
+              <span class="peek-live-dot" aria-hidden="true"></span>
               <span class="pill-btn-label">Peek</span>
               <svg fill="none" height="18" width="18" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -308,6 +303,7 @@
             </button>
             <div class="pill-divider hide-on-mobile"></div>
             <button type="button" class="pill-btn pill-btn-peek hide-on-mobile" id="close-option-peak" aria-label="Peek">
+              <span class="peek-live-dot" aria-hidden="true"></span>
               <span class="pill-btn-label">Peek</span>
               <svg fill="none" height="18" width="18" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -360,7 +356,10 @@
   <div class="emotion-expanded-overlay" id="emotion-expanded-overlay">
     <div class="emotion-expanded-modal">
       <div class="emotion-expanded-header">
-        <span class="emotion-expanded-title">EMOTION ANALYSIS</span>
+        <div class="emotion-expanded-heading">
+          <span class="emotion-expanded-eyebrow">LIVE VOICE INTELLIGENCE</span>
+          <span class="emotion-expanded-title">Emotion signal map</span>
+        </div>
         <div class="emotion-expanded-legend">
           <span class="emotion-expanded-legend-item"><span class="emotion-expanded-dot cyan"></span>Valence</span>
           <span class="emotion-expanded-legend-item"><span class="emotion-expanded-dot orange"></span>Arousal</span>
@@ -368,6 +367,7 @@
           <span class="emotion-expanded-legend-item"><span class="emotion-expanded-dot green"></span>Engagement</span>
           <span class="emotion-expanded-legend-item"><span class="emotion-expanded-dot blue"></span>Stability</span>
         </div>
+        <button type="button" class="emotion-expanded-close" id="emotion-expanded-close" aria-label="Close emotion analysis">×</button>
       </div>
       <div class="emotion-expanded-body">
         <div id="emotion-analysis-expanded-root"></div>

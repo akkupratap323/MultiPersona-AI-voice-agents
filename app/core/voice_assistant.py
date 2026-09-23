@@ -17,30 +17,21 @@ from pipecat.frames.frames import (
     TTSSpeakFrame,
     TextFrame,
     LLMFullResponseStartFrame,
-    LLMFullResponseEndFrame
+    LLMFullResponseEndFrame,
+    TTSUpdateSettingsFrame,
 )
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
-from pipecat.processors.filters.stt_mute_filter import STTMuteFilter, STTMuteConfig, STTMuteStrategy
-from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor, RTVIServerMessageFrame
+from pipecat.processors.frameworks.rtvi import RTVIObserver, RTVIProcessor, RTVIServerMessageFrame
 from pipecat.processors.aggregators.sentence import SentenceAggregator
 from pipecat.transports.base_transport import BaseTransport
-
-# Import interruption strategy for barge-in support
-try:
-    from pipecat.audio.interruptions.min_words_interruption_strategy import MinWordsInterruptionStrategy
-    INTERRUPTION_STRATEGY_AVAILABLE = True
-except ImportError:
-    INTERRUPTION_STRATEGY_AVAILABLE = False
-    logger.warning("MinWordsInterruptionStrategy not available - interruptions may not work correctly")
 
 from app.services.conversation import ConversationManager
 from app.services.input_analyzer import InputAnalyzer
 from app.services.latency import LatencyAnalyzer
 from app.services.stt import SpeechToTextService
 from app.services.tts import TextToSpeechService
-from app.processors.tone_aware_processor import ToneAwareProcessor
 from app.processors.text_filter_processor import TextFilterProcessor
 from app.processors.visual_hint_processor import VisualHintProcessor
 from app.processors.smart_interruption_processor import SmartInterruptionProcessor
@@ -85,18 +76,8 @@ class VoiceAssistant:
         self.pipeline = None
         self.task = None
         self.runner = None
-        self.rtvi = RTVIProcessor(config=RTVIConfig(config=[]))
+        self.rtvi = RTVIProcessor()
         self.latency_analyzer = LatencyAnalyzer()
-
-        # STT mute filter - mutes STT only during the first bot greeting
-        # MUTE_UNTIL_FIRST_BOT_COMPLETE: blocks user audio only during initial greeting TTS,
-        # then allows all user input through (including barge-in interruptions)
-        # Self-interruption prevention relies on:
-        #   1. Client-side echoCancellation: true (getUserMedia constraint)
-        #   2. VAD params (confidence=0.7, min_volume=0.5, start_secs=0.2)
-        self.stt_mute_filter = STTMuteFilter(
-            config=STTMuteConfig(strategies={STTMuteStrategy.MUTE_UNTIL_FIRST_BOT_COMPLETE})
-        )
 
         # Tone-aware processor for dynamic voice selection using MSP-PODCAST + LLM text sentiment
         # Uses Google API key for Gemini-based text sentiment detection
@@ -104,15 +85,26 @@ class VoiceAssistant:
         google_api_key = self.config.get("conversation", {}).get("llm", {}).get("api_key")
         server_config = self.config.get("server", {})
         emotion_enabled = server_config.get("emotion_detection_enabled", True)
+        tts_config = self.config.get("tts", {}).get("config", {})
+        dynamic_tts_emotion = tts_config.get("dynamic_emotion", True)
         logger.info(
             f"[EMOTION-DIAG] Emotion detection config: enabled={emotion_enabled}, "
             f"groq_api_key={'SET' if google_api_key and not google_api_key.startswith('$') else 'MISSING'}"
         )
-        self.tone_processor = ToneAwareProcessor(
-            cooldown_seconds=3.0,  # Cooldown between voice switches
-            enabled=emotion_enabled,  # Read from config - can disable for performance
-            groq_api_key=google_api_key,  # Pass Google API key for LLM text sentiment (Gemini)
-        )
+        self.tone_processor = None
+        if emotion_enabled:
+            # Keep the heavy wav2vec2/PyTorch dependency completely outside the
+            # production import path when emotion analysis is disabled.
+            from app.processors.tone_aware_processor import ToneAwareProcessor
+
+            self.tone_processor = ToneAwareProcessor(
+                cooldown_seconds=3.0,
+                enabled=True,
+                tts_emotion_enabled=dynamic_tts_emotion,
+                groq_api_key=google_api_key,
+            )
+        else:
+            logger.info("Emotion detection disabled; skipping MSP-PODCAST and PyTorch")
 
         # Text filter processor to remove markdown before TTS.
         # inject_laughter=True only for Cartesia — it understands [laughter] tags natively.
@@ -207,11 +199,13 @@ class VoiceAssistant:
         conversation_config = self.config.get("conversation", {})
         language_config = self.config.get("language", {})
         server_config = self.config.get("server", {})
-        smart_turn_config = server_config.get("smart_turn", {})
 
         # Include system_prompt in llm_config so ConversationManager can access it
         llm_config = conversation_config.get("llm", {}).copy()
         llm_config["system_prompt"] = conversation_config.get("system_prompt", "")
+        llm_config["voice_delivery_instructions"] = conversation_config.get(
+            "voice_delivery_instructions", ""
+        )
 
         # Override system_prompt if persona has a custom one
         if self.persona_config and self.persona_config.get("system_prompt_override"):
@@ -232,7 +226,7 @@ class VoiceAssistant:
             input_analyzer=self.input_analyzer,
             llm_config=llm_config,
             language_config=language_config,
-            smart_turn_config=smart_turn_config,
+            vad_config=server_config.get("vad", {}),
             personas_config=personas_config,
             current_persona_id=current_persona_id,
         )
@@ -259,7 +253,7 @@ class VoiceAssistant:
         tts = self.tts_service.get_service()
         llm = self.conversation_manager.get_llm_service()
 
-        # Get context aggregator (SmartTurn v3 is now configured here via UserTurnStrategies)
+        # Flux advertises its external turn strategies to this aggregator.
         context_aggregator = self.conversation_manager.get_context_aggregator()
 
         # Store LLM, TTS and context for greeting injection
@@ -275,22 +269,11 @@ class VoiceAssistant:
             self._handle_agent_transfer
         )
 
-        # Connect TTS to tone processor for dynamic voice switching
-        self.tone_processor.set_tts_service(tts)
-
-        # Connect VisualHintProcessor to ToneProcessor for A2UI query capture
-        self.tone_processor.set_visual_hint_processor(self.visual_hint_processor)
-
-        # Initialize MSP-PODCAST wav2vec2 for emotion detection
-        logger.info("[EMOTION-DIAG] About to call tone_processor.initialize()...")
-        await self.tone_processor.initialize()
-        logger.info(
-            f"[EMOTION-DIAG] After initialize: "
-            f"detector_connected={self.tone_processor.emotion_detector.is_connected}, "
-            f"detector_model={self.tone_processor.emotion_detector.model is not None}, "
-            f"hybrid_detector={self.tone_processor.hybrid_detector is not None}, "
-            f"enabled={self.tone_processor.enabled}"
-        )
+        if self.tone_processor:
+            self.tone_processor.set_tts_service(tts)
+            self.tone_processor.set_visual_hint_processor(self.visual_hint_processor)
+            logger.info("[EMOTION-DIAG] Initializing optional tone processor...")
+            await self.tone_processor.initialize()
 
         # Get smart interruption config for conditional pipeline inclusion
         server_config = self.config.get("server", {})
@@ -315,12 +298,10 @@ class VoiceAssistant:
         else:
             logger.info("🛡️ SmartInterruptionProcessor DISABLED - not added to pipeline")
 
-        # Continue with rest of pipeline
-        # STTMuteFilter MUST be before context_aggregator.user() to block
-        # VAD/transcription frames during bot speech (prevents self-interruption)
+        if self.tone_processor:
+            pipeline_processors.append(self.tone_processor)
+
         pipeline_processors.extend([
-            self.tone_processor,          # AFTER STT to receive both audio AND transcriptions for hybrid mode
-            self.stt_mute_filter,         # Mute BEFORE context - blocks VAD/STT frames during bot speech
             context_aggregator.user(),    # Context aggregator (receives only unmuted frames)
             self.rtvi,
             llm,
@@ -357,26 +338,10 @@ class VoiceAssistant:
         pipeline_params = PipelineParams(
             enable_metrics=enable_metrics,
             enable_usage_metrics=enable_metrics,
-            idle_timeout_secs=60,  # Increased from default ~5s to prevent premature cancellation
             report_only_initial_ttfb=True,  # Only report first TTFB for cleaner metrics
-            allow_interruptions=True,  # Enable barge-in - user can interrupt bot speech
         )
 
-        # Interruption strategy configuration
-        # When interruption_strategies is set, pipecat DEFERS interruption to the
-        # LLM aggregator (waits for word count check). When empty, pipecat sends
-        # InterruptionFrame IMMEDIATELY on any UserStartedSpeakingFrame during bot speech.
-        # Using immediate interruption for reliable barge-in behavior.
-        server_config = self.config.get("server", {})
-        interruption_config = server_config.get("interruption", {})
-        min_words = interruption_config.get("min_words", 0)
-
-        if INTERRUPTION_STRATEGY_AVAILABLE and min_words > 0:
-            pipeline_params.interruption_strategies = [MinWordsInterruptionStrategy(min_words=min_words)]
-            logger.info(f"🎤 Interruption: DEFERRED mode (MinWords={min_words})")
-        else:
-            # No strategies = immediate interruption on any speech during bot output
-            logger.info(f"🎤 Interruption: IMMEDIATE mode (any speech stops TTS)")
+        logger.info("Interruption and barge-in are managed by Deepgram Flux turn events")
 
         self.task = PipelineTask(
             self.pipeline,
@@ -408,10 +373,6 @@ class VoiceAssistant:
             logger.info("🎤 Pipeline ready, sending greeting...")
 
             # Queue greeting through the TASK so it flows through the full pipeline
-            # This is critical: STTMuteFilter needs to see TTS start/stop frames
-            # to know when bot speech begins/ends. Pushing directly to self.tts
-            # bypasses the pipeline and the mute filter never unmutes.
-
             # Use persona-specific greetings if available, otherwise default
             import random
             if self.persona_config and self.persona_config.get("greetings"):
@@ -497,17 +458,14 @@ class VoiceAssistant:
         """
         import os
 
-        # 1. Switch TTS voice
+        # Resolve the new voice before publishing the handoff. Both frames are
+        # queued together so the pipeline applies the voice first and the UI can
+        # stage the matching identity for the next BotStartedSpeaking event.
         new_voice_id = persona_config.get("voice_id", "")
         if new_voice_id.startswith("${") and new_voice_id.endswith("}"):
             env_var = new_voice_id[2:-1]
             new_voice_id = os.getenv(env_var, "")
 
-        if new_voice_id and self.tts:
-            self.tts.set_voice(new_voice_id)
-            logger.info(f"🔄 TTS voice switched to {new_voice_id[:8]}... for {persona_config.get('name', agent_id)}")
-
-        # 2. Notify frontend via RTVI data message
         agent_name = persona_config.get("name", agent_id)
         agent_role = persona_config.get("role", "Agent")
         agent_avatar = persona_config.get("avatar", "")
@@ -519,12 +477,26 @@ class VoiceAssistant:
                 "name": agent_name,
                 "role": agent_role,
                 "avatar": agent_avatar,
+                "apply_on_next_speech": True,
             }
         )
 
         if self.task:
-            await self.task.queue_frame(transfer_message)
-            logger.info(f"🔄 Agent transfer notification sent to frontend: {agent_name}")
+            frames = []
+            settings_class = getattr(self.tts, "Settings", None) if self.tts else None
+            if new_voice_id and settings_class:
+                frames.append(
+                    TTSUpdateSettingsFrame(
+                        delta=settings_class(voice=new_voice_id),
+                        service=self.tts,
+                    )
+                )
+            frames.append(transfer_message)
+            await self.task.queue_frames(frames)
+            logger.info(
+                f"🔄 Staged synchronized transfer to {agent_name} "
+                f"(voice={'updated' if new_voice_id and settings_class else 'unchanged'})"
+            )
 
         # Update persona_config reference
         self.persona_config = persona_config

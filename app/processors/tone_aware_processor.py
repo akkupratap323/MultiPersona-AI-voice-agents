@@ -22,10 +22,10 @@ from pipecat.frames.frames import (
     Frame,
     TranscriptionFrame,
     InterimTranscriptionFrame,
-    TranscriptionUpdateFrame,
     AudioRawFrame,
     BotStartedSpeakingFrame,
     BotStoppedSpeakingFrame,
+    TTSUpdateSettingsFrame,
 )
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.processors.frameworks.rtvi import RTVIServerMessageFrame
@@ -82,6 +82,7 @@ class ToneAwareProcessor(FrameProcessor):
         tts_service=None,
         cooldown_seconds: float = 2.0,  # Slightly longer for stability
         enabled: bool = True,
+        tts_emotion_enabled: bool = True,
         use_hybrid_mode: bool = True,  # NEW: Enable hybrid audio+text detection
         groq_api_key: str = None,  # LLM API key for text sentiment (supports Google Gemini)
         **kwargs
@@ -92,6 +93,7 @@ class ToneAwareProcessor(FrameProcessor):
             tts_service: Reference to Deepgram TTS service for voice switching
             cooldown_seconds: Minimum time between voice switches
             enabled: Whether to enable tone-aware voice switching
+            tts_emotion_enabled: Whether detected tones may alter TTS delivery
             use_hybrid_mode: Use hybrid audio+text emotion detection (default: True)
             groq_api_key: LLM API key for text sentiment (Google Gemini API key)
             **kwargs: Additional arguments passed to FrameProcessor
@@ -113,6 +115,7 @@ class ToneAwareProcessor(FrameProcessor):
 
         self.tts_service = tts_service
         self.enabled = enabled
+        self.tts_emotion_enabled = tts_emotion_enabled
 
         # Voice switching state
         self.current_voice_model: str = DEFAULT_VOICE
@@ -330,7 +333,6 @@ class ToneAwareProcessor(FrameProcessor):
         transcription_types = (
             TranscriptionFrame,
             InterimTranscriptionFrame,
-            TranscriptionUpdateFrame,
         )
         if isinstance(frame, transcription_types):
             text = getattr(frame, "text", "")
@@ -617,6 +619,12 @@ class ToneAwareProcessor(FrameProcessor):
             tone: Detected tone
             confidence: Confidence score
         """
+        if not self.tts_emotion_enabled:
+            logger.debug(
+                f"TTS emotion is locked; detected '{tone}' for UI/context only"
+            )
+            return
+
         current_tone = self._get_current_tone()
 
         logger.debug(
@@ -737,10 +745,17 @@ class ToneAwareProcessor(FrameProcessor):
                     f"Cartesia TTS: emotion='{cartesia_emotion}' speed={speed} volume={volume} "
                     f"(from internal tone='{tone}')"
                 )
-                self.tts_service._settings["generation_config"] = GenerationConfig(
-                    emotion=cartesia_emotion,
-                    speed=speed,
-                    volume=volume,
+                await self.push_frame(
+                    TTSUpdateSettingsFrame(
+                        delta=CartesiaTTSService.Settings(
+                            generation_config=GenerationConfig(
+                                emotion=cartesia_emotion,
+                                speed=speed,
+                                volume=volume,
+                            )
+                        ),
+                        service=self.tts_service,
+                    )
                 )
                 self.current_voice_model = tone
                 logger.info(
@@ -942,9 +957,6 @@ class ToneAwareProcessor(FrameProcessor):
             if isinstance(self.tts_service, ChatterboxTTSService):
                 self.tts_service.set_emotion("neutral")
                 logger.info("Emotion reset to neutral (Chatterbox)")
-            else:
-                self.tts_service.set_voice(DEFAULT_VOICE)
-                logger.info(f"Voice reset to default: {DEFAULT_VOICE}")
 
     async def cleanup(self) -> None:
         """Clean up resources and cancel background tasks."""

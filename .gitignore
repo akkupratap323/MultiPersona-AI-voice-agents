@@ -69,6 +69,7 @@ logs/
 *.tmp
 *.temp
 .tmp/
+.run/
 
 # OS generated files
 Thumbs.db

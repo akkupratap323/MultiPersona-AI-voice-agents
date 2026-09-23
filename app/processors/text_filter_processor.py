@@ -155,6 +155,11 @@ class TextFilterProcessor(FrameProcessor):
         Returns:
             Text with [laughter] tags injected where appropriate
         """
+        # Respect a deliberate marker produced by the LLM and avoid adding a
+        # second laugh to the same streamed text fragment.
+        if "[laughter]" in text.lower():
+            return text
+
         def _insert_after_match(m: re.Match) -> str:
             return m.group(0) + " [laughter]"
 

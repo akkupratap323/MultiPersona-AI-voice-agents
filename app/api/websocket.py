@@ -7,7 +7,7 @@ supporting multiple concurrent user connections with capacity management.
 Features:
 - Optional noise suppression (configurable)
 - ai-coustics AIC speech enhancement (noise reduction + clarity)
-- SmartTurn v3 ML-based end-of-turn detection
+- Deepgram Flux native turn detection
 - Emotion detection via MSP-PODCAST + Gemini
 """
 
@@ -25,7 +25,7 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     - Session tracking and management
     - Heartbeat monitoring for stale connections
     - Isolated VoiceAssistant instance per connection
-    - SmartTurn v3 ML-based end-of-turn detection
+    - Deepgram Flux native turn detection
     - Optional noise suppression (configurable)
     - ai-coustics AIC speech enhancement (optional)
 
@@ -54,9 +54,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         from pipecat.transports.websocket.fastapi import FastAPIWebsocketTransport
         from pipecat.transports.websocket.fastapi import FastAPIWebsocketParams
         from pipecat.serializers.protobuf import ProtobufFrameSerializer
-        from pipecat.audio.vad.silero import SileroVADAnalyzer
-        from pipecat.audio.vad.vad_analyzer import VADParams
-        # MinWordsInterruptionStrategy moved to voice_assistant.py (PipelineParams level)
 
         # Get configuration from config.yaml
         # Note: server_config from voice_assistant_server may not have all keys if initialized
@@ -64,7 +61,6 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         full_config = voice_assistant_server.config or {}
         server_config = full_config.get("server", {})
         vad_config = server_config.get("vad", {})
-        interruption_config = server_config.get("interruption", {})
         koala_config = full_config.get("noise_suppression", {})
         aic_config = full_config.get("speech_enhancement", {})
 
@@ -146,59 +142,18 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
             # No filters
             logger.warning(f"[Session {session_id}] ⚠️ No audio filters enabled - raw audio will be used")
 
-        # Stricter VAD settings to prevent false barge-ins from background noise
-        # MinWordsInterruptionStrategy (below) provides additional filtering
-        vad_params = VADParams(
-            confidence=vad_config.get("confidence", 0.7),     # HIGHER - only trigger on clear speech
-            start_secs=vad_config.get("start_secs", 0.5),      # SLOWER - require 500ms of speech (filters noise)
-            stop_secs=vad_config.get("stop_secs", 1.0),        # Wait 1s of silence before ending utterance
-            min_volume=vad_config.get("min_volume", 0.65),     # HIGHER - ignore quiet background noise
-        )
-        vad_analyzer = SileroVADAnalyzer(params=vad_params)
-
-        # Interruption strategy is configured in voice_assistant.py via PipelineParams
-        # (MinWordsInterruptionStrategy is a pipeline-level param, not transport-level)
-
-        # Register VAD analyzer for runtime parameter changes (noise cancellation toggle)
-        connection_manager.register_vad_analyzer(session_id, vad_analyzer)
-
-        logger.info(
-            f"[Session {session_id}] 🎤 VAD configured: confidence={vad_params.confidence}, "
-            f"start_secs={vad_params.start_secs}, stop_secs={vad_params.stop_secs}, "
-            f"min_volume={vad_params.min_volume}"
-        )
-
-        # ===== SMARTTURN V3 - Configured at transport level (pipecat 0.0.98) =====
-        smart_turn_config = server_config.get("smart_turn", {})
-        turn_analyzer = None
-        if smart_turn_config.get("enabled", False):
-            try:
-                from app.processors.logging_turn_analyzer import LoggingSmartTurnAnalyzer
-                cpu_count = smart_turn_config.get("cpu_count", 1)
-                turn_analyzer = LoggingSmartTurnAnalyzer(
-                    cpu_count=cpu_count,
-                    session_id=session_id
-                )
-                logger.info(f"[Session {session_id}] 🧠 SmartTurn v3: ENABLED at transport level (ONNX ML model)")
-            except Exception as e:
-                logger.error(f"[Session {session_id}] 🧠 SmartTurn v3: Failed to initialize: {e}")
-                logger.info(f"[Session {session_id}] 🧠 Falling back to transcription-based detection")
-        else:
-            logger.info(f"[Session {session_id}] 🧠 SmartTurn v3: DISABLED (using transcription-based detection)")
+        logger.info(f"[Session {session_id}] Deepgram Flux provides native turn detection")
 
         # Create transport parameters for this connection
         transport_params = FastAPIWebsocketParams(
             audio_in_enabled=True,
             audio_out_enabled=True,
             add_wav_header=False,
-            vad_enabled=True,
-            vad_analyzer=vad_analyzer,
-            vad_audio_passthrough=True,
+            audio_in_passthrough=True,
             serializer=ProtobufFrameSerializer(),
             audio_in_filter=audio_in_filter,  # AIC or Koala (single filter only)
             audio_in_sample_rate=16000,  # Koala/AIC require 16 kHz input
             audio_out_sample_rate=24000,  # Chatterbox TTS outputs 24 kHz
-            turn_analyzer=turn_analyzer,  # SmartTurn v3 ML-based end-of-turn detection
         )
 
         # Build filter description for logging
@@ -237,22 +192,27 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
         logger.info(
             f"[Session {session_id}] [EMOTION-DIAG] Session emotion config: "
             f"enabled={emotion_enabled}, "
-            f"tone_processor_enabled={voice_assistant.tone_processor.enabled}, "
-            f"hybrid_mode={voice_assistant.tone_processor.use_hybrid_mode}"
+            f"tone_processor_loaded={voice_assistant.tone_processor is not None}"
         )
 
         # Log complete audio processing pipeline
-        smart_turn_desc = "SmartTurn v3 (transport)" if turn_analyzer else "Transcription-based"
+        turn_detection_desc = "Deepgram Flux native turn detection"
+        llm_config = full_config.get("conversation", {}).get("llm", {})
+        tts_config = full_config.get("tts", {})
+        llm_desc = f"{llm_config.get('provider', 'unknown')} {llm_config.get('model', '')}".strip()
+        tts_desc = (
+            f"{tts_config.get('provider', 'unknown')} "
+            f"{tts_config.get('config', {}).get('model', '')}"
+        ).strip()
         logger.info(
             f"[Session {session_id}] 📊 AUDIO PIPELINE SUMMARY:\n"
             f"  ┌─ Input: Microphone (16kHz)\n"
             f"  ├─ Filters: {filter_desc}\n"
-            f"  ├─ VAD: Silero (conf={vad_params.confidence}, start={vad_params.start_secs}s, vol={vad_params.min_volume})\n"
-            f"  ├─ Turn Detection: {smart_turn_desc}\n"
-            f"  ├─ STT Mute: ALWAYS (blocks VAD/STT during bot speech)\n"
-            f"  ├─ STT: Deepgram Nova-3\n"
-            f"  ├─ LLM: Groq Llama-3.3-70b\n"
-            f"  └─ TTS: ElevenLabs (24kHz)"
+            f"  ├─ VAD: Silero fallback in the user aggregator\n"
+            f"  ├─ Turn Detection: {turn_detection_desc}\n"
+            f"  ├─ STT: Deepgram Flux\n"
+            f"  ├─ LLM: {llm_desc}\n"
+            f"  └─ TTS: {tts_desc} (24kHz)"
         )
 
         # Run the voice assistant pipeline for this connection

@@ -22,6 +22,7 @@ echo "LightRAG URL configured: ${LIGHTRAG_URL}"
 # Create runtime config.js with all window globals
 cat > /usr/share/nginx/html/config.js << EOF
 window.__BACKEND_URL__ = "${BACKEND_URL}";
+window.__LIGHTRAG_URL__ = "${LIGHTRAG_URL}";
 window.LIGHTRAG_URL = "${LIGHTRAG_URL}";
 window.LIGHTRAG_API_KEY = "${LIGHTRAG_API_KEY}";
 EOF

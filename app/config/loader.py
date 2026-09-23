@@ -96,6 +96,15 @@ def load_config(config_file: str = "config.yaml") -> Dict[str, Any]:
     # Substitute environment variables
     config = _substitute_env_vars(config)
 
+    # The optional MSP-PODCAST model is large and is initialized when a voice
+    # session opens. Allow local/deployment environments to disable it without
+    # maintaining a separate config file.
+    emotion_override = os.getenv("EMOTION_DETECTION_ENABLED")
+    if emotion_override is not None:
+        config.setdefault("server", {})["emotion_detection_enabled"] = (
+            emotion_override.strip().lower() in {"1", "true", "yes", "on"}
+        )
+
     return config
 
 

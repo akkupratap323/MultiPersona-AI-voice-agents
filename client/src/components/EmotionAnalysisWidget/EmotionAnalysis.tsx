@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { EmotionTopicNode } from './types';
 import './EmotionAnalysis.css';
 
@@ -8,12 +8,12 @@ export interface EmotionAnalysisProps {
 }
 
 /* ── Emotion → visual mapping ── */
-const EMOTION_MAP: Record<string, { emoji: string; color: string; label: string }> = {
-  Excited:   { emoji: '😄', color: '#f59e0b', label: 'Excited' },
-  Positive:  { emoji: '🙂', color: '#10b981', label: 'Positive' },
-  Neutral:   { emoji: '😐', color: '#8b8b8b', label: 'Neutral' },
-  Calm:      { emoji: '😌', color: '#06b6d4', label: 'Calm' },
-  Concerned: { emoji: '😟', color: '#ef4444', label: 'Frustrated' },
+const EMOTION_MAP: Record<string, { glyph: string; color: string; label: string }> = {
+  Excited:   { glyph: 'EX', color: '#f59e0b', label: 'Excited' },
+  Positive:  { glyph: '+', color: '#10b981', label: 'Positive' },
+  Neutral:   { glyph: '—', color: '#94a3b8', label: 'Neutral' },
+  Calm:      { glyph: 'CA', color: '#06b6d4', label: 'Calm' },
+  Concerned: { glyph: '!', color: '#fb7185', label: 'Concerned' },
 };
 
 const AXIS_COLORS = {
@@ -69,16 +69,6 @@ function dataPolygonPoints(values: number[], maxRadius: number): string {
 export function EmotionAnalysis({ topics, hideTitle }: EmotionAnalysisProps) {
   const radarRef = useRef<SVGSVGElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
-  const [frame, setFrame] = useState(0);
-
-  // Animate radar morph
-  useEffect(() => {
-    let raf: number;
-    const tick = () => { setFrame(f => f + 1); raf = requestAnimationFrame(tick); };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
   // Auto-scroll timeline
   useEffect(() => {
     if (timelineRef.current) {
@@ -96,12 +86,20 @@ export function EmotionAnalysis({ topics, hideTitle }: EmotionAnalysisProps) {
   const ringCircumference = 213;
   const ringOffset = ringCircumference - (ringCircumference * confidence) / 100;
 
-  // Radar data polygon with subtle morph
-  const morphedValues = useMemo(() => {
-    const t = frame * 0.02;
-    const base = [metrics.valence, metrics.arousal, metrics.dominance, metrics.engagement, metrics.stability];
-    return base.map((v, i) => Math.max(0.05, Math.min(1, v + Math.sin(t + i * 1.3) * 0.015)));
-  }, [frame, metrics.valence, metrics.arousal, metrics.dominance, metrics.engagement, metrics.stability]);
+  const metricValues = [
+    metrics.valence,
+    metrics.arousal,
+    metrics.dominance,
+    metrics.engagement,
+    metrics.stability,
+  ];
+  const recentTraces = useMemo(
+    () => topics.slice(-4, -1).map((topic) => {
+      const point = calculateMetrics(topic);
+      return [point.valence, point.arousal, point.dominance, point.engagement, point.stability];
+    }),
+    [topics],
+  );
 
   const maxRadius = 70;
 
@@ -112,7 +110,7 @@ export function EmotionAnalysis({ topics, hideTitle }: EmotionAnalysisProps) {
         <div className="ea-emoji-ring">
           <div className="ea-particle-glow" style={{ background: `radial-gradient(circle, ${emotionInfo.color}22 0%, transparent 70%)` }} />
           <div className="ea-emoji-circle" style={{ borderColor: `${emotionInfo.color}80`, boxShadow: `0 0 20px ${emotionInfo.color}44` }}>
-            {emotionInfo.emoji}
+            {emotionInfo.glyph}
           </div>
           <svg className="ea-confidence-ring" viewBox="0 0 72 72">
             <circle cx="36" cy="36" r="34" fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="2" />
@@ -122,12 +120,16 @@ export function EmotionAnalysis({ topics, hideTitle }: EmotionAnalysisProps) {
           </svg>
         </div>
         <div className="ea-state-info">
-          <span className="ea-state-label">CURRENT STATE</span>
+          <span className="ea-state-label">CURRENT SIGNAL</span>
           <span className="ea-state-emotion">{emotionInfo.label}</span>
           <div className="ea-state-confidence">
             <span className="ea-confidence-dot" style={{ background: '#22c55e' }} />
             <span className="ea-confidence-text">CONFIDENCE: {confidence}%</span>
           </div>
+        </div>
+        <div className="ea-live-meta">
+          <span className="ea-live-pill"><i /> LIVE</span>
+          <span className="ea-sample-count">{topics.length} SIGNAL{topics.length === 1 ? '' : 'S'}</span>
         </div>
       </section>
 
@@ -140,7 +142,14 @@ export function EmotionAnalysis({ topics, hideTitle }: EmotionAnalysisProps) {
                 <stop offset="0%" stopColor={`${emotionInfo.color}66`} />
                 <stop offset="100%" stopColor={`${emotionInfo.color}22`} />
               </linearGradient>
+              <radialGradient id="eaRadarHalo">
+                <stop offset="0%" stopColor={`${emotionInfo.color}22`} />
+                <stop offset="72%" stopColor={`${emotionInfo.color}08`} />
+                <stop offset="100%" stopColor={emotionInfo.color} stopOpacity="0" />
+              </radialGradient>
             </defs>
+
+            <circle cx={CX} cy={CY} r="92" fill="url(#eaRadarHalo)" className="ea-radar-halo" />
 
             {/* Concentric pentagon grid */}
             {[0.2, 0.4, 0.6, 0.8, 1.0].map(level => (
@@ -154,20 +163,35 @@ export function EmotionAnalysis({ topics, hideTitle }: EmotionAnalysisProps) {
               return <line key={i} x1={CX} y1={CY} x2={ex} y2={ey} stroke="rgba(255,255,255,0.07)" strokeWidth="0.5" />;
             })}
 
-            {/* Data polygon */}
+            {/* Recent signal traces give the graph a sense of motion and history. */}
+            {recentTraces.map((values, index) => (
+              <polygon
+                key={index}
+                points={dataPolygonPoints(values, maxRadius)}
+                fill="none"
+                stroke={emotionInfo.color}
+                strokeWidth="0.7"
+                opacity={(index + 1) * 0.1}
+                className="ea-history-polygon"
+              />
+            ))}
+
+            {/* Current signal polygon */}
             <polygon
-              points={dataPolygonPoints(morphedValues, maxRadius)}
+              points={dataPolygonPoints(metricValues, maxRadius)}
               fill="url(#eaRadarGrad)"
               stroke={emotionInfo.color}
               strokeWidth="1.5"
+              className="ea-current-polygon"
               style={{ filter: `drop-shadow(0 0 10px ${emotionInfo.color}55)`, transition: 'fill 0.5s ease, stroke 0.5s ease' }}
             />
+            <circle cx={CX} cy={CY} r="3" fill={emotionInfo.color} className="ea-radar-core" />
 
             {/* Axis endpoint dots & labels */}
             {AXES.map((axis, i) => {
               const [px, py] = pentagonPoint(i, maxRadius + 4);
               const [lx, ly] = pentagonPoint(i, maxRadius + 16);
-              const value = morphedValues[i];
+              const value = metricValues[i];
               const color = AXIS_COLORS[axis];
               // Text anchor based on position
               const anchor = lx < 80 ? 'end' : lx > 120 ? 'start' : 'middle';
@@ -188,10 +212,24 @@ export function EmotionAnalysis({ topics, hideTitle }: EmotionAnalysisProps) {
         </div>
       </section>
 
+      <section className="ea-metric-strip">
+        {AXES.map((axis, index) => (
+          <div className="ea-metric" key={axis}>
+            <div className="ea-metric-copy">
+              <span>{AXIS_LABELS[index]}</span>
+              <strong>{Math.round(metricValues[index] * 100)}</strong>
+            </div>
+            <div className="ea-metric-track">
+              <span style={{ width: `${metricValues[index] * 100}%`, background: AXIS_COLORS[axis] }} />
+            </div>
+          </div>
+        ))}
+      </section>
+
       {/* ── Bottom: Timeline Strip ── */}
       <section className="ea-timeline-section">
         <div className="ea-timeline-header">
-          <span className="ea-timeline-label">EMOTIONAL DRIFT</span>
+          <span className="ea-timeline-label">SIGNAL HISTORY</span>
           <button className="ea-timeline-btn" onClick={() => {
             if (timelineRef.current) timelineRef.current.scrollLeft = timelineRef.current.scrollWidth;
           }}>→</button>
@@ -218,19 +256,6 @@ export function EmotionAnalysis({ topics, hideTitle }: EmotionAnalysisProps) {
             })}
           </svg>
         </div>
-      </section>
-
-      {/* ── Legend Badges ── */}
-      <section className="ea-legend">
-        {AXES.map(axis => (
-          <span key={axis} className="ea-legend-pill" style={{
-            background: `${AXIS_COLORS[axis]}18`,
-            borderColor: `${AXIS_COLORS[axis]}33`,
-            color: AXIS_COLORS[axis],
-          }}>
-            {axis.charAt(0).toUpperCase() + axis.slice(1)}
-          </span>
-        ))}
       </section>
     </div>
   );

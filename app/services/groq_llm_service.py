@@ -72,7 +72,8 @@ class GroqLLMService(OpenAILLMService):
     def __init__(self, *, model: str = "llama-3.3-70b-versatile", **kwargs):
         # Groq base URL is mandatory; allow caller to override
         kwargs.setdefault("base_url", "https://api.groq.com/openai/v1")
-        super().__init__(model=model, **kwargs)
+        settings = kwargs.pop("settings", OpenAILLMService.Settings(model=model))
+        super().__init__(settings=settings, **kwargs)
 
     def build_chat_completion_params(self, params_from_context: OpenAILLMInvocationParams) -> dict:
         """Build params, merging consecutive user messages first."""

@@ -118,16 +118,13 @@ Mic Input
 [Silero VAD] (conf=0.92 — only clear direct speech triggers)
   │
   ▼
-[Deepgram Nova-3 STT] (streaming, 300ms endpointing for SmartTurn)
+[Deepgram Flux STT] (streaming with native conversational turn detection)
   │
   ▼
 [ToneAwareProcessor] ← MSP-PODCAST + Gemini hybrid emotion (background async)
   │
   ▼
-[STTMuteFilter] (mutes STT during initial greeting — prevents self-interruption)
-  │
-  ▼
-[SmartTurn v3] (ONNX ML end-of-turn detection — replaces silence heuristics)
+[Flux EndOfTurn] (server-side semantic turn completion and barge-in)
   │
   ▼
 [LLM Context Aggregator + DeepSeek V3]
@@ -150,10 +147,10 @@ Audio Output
 ```
 
 **Key design decisions:**
-- **Silero VAD over Deepgram VAD** — local control; Deepgram VAD caused false interruptions
-- **SmartTurn v3 ONNX** — replaces simple silence detection with ML end-of-turn prediction
+- **Flux-owned turns** — Pipecat applies Flux's external turn strategies; Silero remains a local fallback
+- **Deepgram Flux native EOT** — replaces simple silence detection with ML end-of-turn prediction
 - **Non-blocking emotion** — background async tasks, zero pipeline latency impact
-- **Immediate barge-in** (`min_words=0`) — any speech stops TTS instantly
+- **Flux barge-in** — server-side `StartOfTurn` events interrupt TTS without a local word-count heuristic
 - **CPU-only PyTorch** — fits 2GB RAM constraint on $12/month Lightsail instance
 - **Connection pooling** — shared `httpx` async client for LightRAG queries
 
@@ -187,15 +184,15 @@ Knowledge queries route through **LightRAG** — a graph-based RAG system that u
 
 | Layer | Technology |
 |-------|-----------|
-| **Voice Pipeline** | Pipecat v0.0.98 |
-| **STT** | Deepgram Nova-3 |
+| **Voice Pipeline** | Pipecat v1.10.0 |
+| **STT** | Deepgram Flux |
 | **LLM** | DeepSeek V3 (`deepseek-chat`) |
 | **TTS** | Cartesia Sonic-3 (word timestamps + emotion control) |
 | **Audio Emotion** | MSP-PODCAST wav2vec2 (`audeering/wav2vec2-large-robust-12-ft-emotion-msp-dim`) |
 | **Text Sentiment** | Google Gemini 2.0 Flash |
 | **Fusion** | Custom 70/30 weighted hybrid detector |
 | **RAG** | LightRAG (graph-based) |
-| **Turn Detection** | SmartTurn v3 ONNX |
+| **Turn Detection** | Deepgram Flux native EOT |
 | **VAD** | Silero VAD (conf=0.92) |
 | **Backend** | FastAPI + uvicorn |
 | **Frontend** | TypeScript + Vite |
@@ -215,13 +212,13 @@ Browser (TypeScript/Vite)
 FastAPI (app/main.py) — port 7860
     │
     ├─ Pipecat Pipeline (per session)
-    │   ├─ STT: Deepgram Nova-3
+    │   ├─ STT: Deepgram Flux
     │   ├─ LLM: DeepSeek V3
     │   ├─ TTS: Cartesia Sonic-3
     │   ├─ Emotion: HybridEmotionDetector (background async)
     │   │   ├─ MSP-PODCAST wav2vec2 (audio channel, 70%)
     │   │   └─ Gemini Flash (text channel, 30%)
-    │   ├─ Turn: SmartTurn v3 ONNX
+    │   ├─ Turn: Deepgram Flux native EOT
     │   └─ A2UI: VisualHintProcessor → frontend card render
     │
     ├─ Session Management
@@ -298,7 +295,7 @@ Key sections:
 | `conversation.system_prompt` | Default agent (Brooke) system prompt |
 | `personas.agents` | All 6 agent definitions — voice ID, personality, greetings |
 | `server.vad` | VAD confidence and volume thresholds |
-| `server.smart_turn` | SmartTurn ONNX timeout and CPU settings |
+| `stt.config.eot_*` | Flux end-of-turn confidence and timeout settings |
 | `server.emotion_detection_enabled` | Toggle hybrid emotion detection |
 | `a2ui` | Template tier mode, confidence threshold, streaming |
 | `stt.config` | Deepgram streaming settings, corrections |

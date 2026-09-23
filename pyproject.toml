@@ -30,7 +30,7 @@ dependencies = [
     "python-dotenv>=1.1.0",
     "PyYAML>=6.0.0",
     "loguru>=0.7.0",
-    "pipecat-ai[daily,deepgram,cartesia,silero,websocket,google,openai]",
+    "pipecat-ai[deepgram,cartesia,websocket,google,openai]==1.10.0",
     "pipecat-ai-small-webrtc-prebuilt",
     "pinecone-client>=3.0.0",
     "langgraph>=0.2.0",

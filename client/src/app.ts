@@ -79,7 +79,6 @@ class VoiceScannerApp {
   private terminalContent: HTMLElement | null = null;
   private terminalStatus: HTMLElement | null = null;
   private typingLine: HTMLElement | null = null;
-  private timestampElement: HTMLElement | null = null;
   private notification: HTMLElement | null = null;
 
   // Canvas elements
@@ -154,6 +153,14 @@ class VoiceScannerApp {
   private liveSubtitleText: HTMLElement | null = null;
   private subtitleClearTimeout: ReturnType<typeof setTimeout> | null = null;
   private botIsSpeaking: boolean = false;
+  private pendingAgentTransfer: {
+    data: { agent_id: string; name: string; role: string; avatar: string };
+    stagedAt: number;
+    waitForPreviousSpeech: boolean;
+  } | null = null;
+  private agentTransferSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly AGENT_TRANSFER_GUARD_MS = 300;
+  private static readonly AGENT_TRANSFER_AUDIO_DELAY_MS = 140;
   private subtitleWordCount: number = 0;
   private subtitleClearOnNextSentence: boolean = false;
 
@@ -206,7 +213,6 @@ class VoiceScannerApp {
   // Persona selection
   private selectedPersonaId: string = '';
   private personaSelectionScreen: HTMLElement | null = null;
-  private sessionStartTime: number = 0;
 
   // Dashboard stats tracking
   private mcStatMessageCount: number = 0;
@@ -224,7 +230,6 @@ class VoiceScannerApp {
     this.setupDOMElements();
     this.setupEventListeners();
     this.initializeCanvases();
-    this.startTimestampUpdate();
     this.createFloatingParticles();
     this.showLoadingOverlay();
     this.setVoiceState('idle');
@@ -277,12 +282,12 @@ class VoiceScannerApp {
 
     // Fallback persona data
     const fallbackPersonas = [
-      { id: 'receptionist', name: 'Brooke', role: 'General Assistant', description: 'Sharp and friendly generalist — knows a bit about everything', avatar: '/personas/receptionist.webp', tags: ['English', 'Female', 'Generalist'] },
-      { id: 'customer_support', name: 'Blake', role: 'Problem Solver', description: 'Calm and methodical troubleshooter — if it\'s broken, Blake will fix it', avatar: '/personas/customer-support.webp', tags: ['English', 'Male', 'Problem Solver'] },
-      { id: 'indian_support', name: 'Arushi', role: 'Hinglish Assistant', description: 'Warm and witty Hinglish-speaking all-rounder', avatar: '/personas/indian-support.webp', tags: ['Hinglish', 'Female', 'All-Rounder'] },
-      { id: 'sales', name: 'Morgan', role: 'Business Strategist', description: 'Sharp business mind — strategy, growth, and getting deals done', avatar: '/personas/sales.webp', tags: ['English', 'Female', 'Business'] },
-      { id: 'technical', name: 'Daniel', role: 'Tech Expert', description: 'Deep technical expert — coding, systems, AI, and infrastructure', avatar: '/personas/technical.webp', tags: ['English', 'Male', 'Technical'] },
-      { id: 'lifestyle', name: 'Naya', role: 'Lifestyle Coach', description: 'Health, fitness, travel, food, and living well', avatar: '/personas/lifestyle.webp', tags: ['English', 'Female', 'Lifestyle'] },
+      { id: 'receptionist', name: 'Brooke', role: 'Chief of Staff', description: 'Frames the problem, coordinates specialists, and turns advice into action', avatar: '/personas/receptionist.webp', tags: ['English', 'Chief of Staff', 'Cross-functional'] },
+      { id: 'customer_support', name: 'Blake', role: 'Customer Success & Operations Lead', description: 'Diagnoses customer friction, service failures, and operational bottlenecks', avatar: '/personas/customer-support.webp', tags: ['English', 'Customer Success', 'Operations'] },
+      { id: 'indian_support', name: 'Arushi', role: 'India Market & People Partner', description: 'Brings Indian market, customer, communication, and workplace context in Hinglish', avatar: '/personas/indian-support.webp', tags: ['Hinglish', 'India Market', 'People Partner'] },
+      { id: 'sales', name: 'Morgan', role: 'Business Strategy Lead', description: 'Works through growth, positioning, pricing, go-to-market, and commercial tradeoffs', avatar: '/personas/sales.webp', tags: ['English', 'Strategy', 'Growth'] },
+      { id: 'technical', name: 'Daniel', role: 'Principal Technical Architect', description: 'Evaluates architecture, AI systems, security, infrastructure, and delivery feasibility', avatar: '/personas/technical.webp', tags: ['English', 'Technology', 'AI & Systems'] },
+      { id: 'lifestyle', name: 'Naya', role: 'People & Culture Lead', description: 'Helps with hiring, team design, performance, communication, culture, and workplace wellbeing', avatar: '/personas/lifestyle.webp', tags: ['English', 'People', 'Culture'] },
     ];
 
     let personas = fallbackPersonas;
@@ -492,16 +497,8 @@ class VoiceScannerApp {
     // Update agent identity on the talking page
     const persona = this.carouselPersonas.find(p => p.id === personaId);
     if (persona) {
-      const agentName = document.getElementById('agent-name');
       const agentAvatar = document.getElementById('agent-avatar-img') as HTMLImageElement | null;
-      const agentStatus = document.getElementById('agent-status');
-      if (agentName) agentName.textContent = persona.name;
       if (agentAvatar && persona.avatar) agentAvatar.src = persona.avatar;
-      if (agentStatus) agentStatus.textContent = 'Connecting...';
-
-      // Sync Mission Control header
-      const mcName = document.getElementById('mc-agent-name');
-      if (mcName) mcName.textContent = persona.name;
 
       // Tint MC mini orb with agent color
       const mcOrbGlow = document.querySelector('.mc-orb-glow') as HTMLElement | null;
@@ -526,9 +523,6 @@ class VoiceScannerApp {
     if (this.personaSelectionScreen) {
       this.personaSelectionScreen.classList.add('hidden');
     }
-
-    // Start session timer
-    this.sessionStartTime = Date.now();
 
     setTimeout(() => {
       this.handleConnect();
@@ -601,7 +595,6 @@ class VoiceScannerApp {
     this.terminalContent = document.getElementById('terminal-content');
     this.terminalStatus = document.getElementById('terminal-status');
     this.typingLine = document.getElementById('typing-line');
-    this.timestampElement = document.getElementById('timestamp');
     this.notification = document.getElementById('notification');
 
     // Canvas elements
@@ -645,6 +638,9 @@ class VoiceScannerApp {
 
     document.getElementById('close-option-restart')?.addEventListener('click', () => this.onRestartOption());
     document.getElementById('close-option-peak')?.addEventListener('click', () => this.onPeakOption());
+    document.getElementById('emotion-expanded-close')?.addEventListener('click', () => {
+      (window as any).EmotionAnalysis?.hideExpanded?.();
+    });
 
     // Expanded Emotion Analysis: click card to show modal, click backdrop or press Esc to close
     const emotionCard = document.getElementById('dashboard-card-4');
@@ -754,6 +750,11 @@ class VoiceScannerApp {
       this.subtitleClearTimeout = null;
     }
     this.botIsSpeaking = false;
+    this.pendingAgentTransfer = null;
+    if (this.agentTransferSyncTimer) {
+      clearTimeout(this.agentTransferSyncTimer);
+      this.agentTransferSyncTimer = null;
+    }
     this.subtitleWordCount = 0;
     this.subtitleClearOnNextSentence = false;
     for (const t of this.subtitleRevealTimeouts) clearTimeout(t);
@@ -1192,35 +1193,6 @@ class VoiceScannerApp {
   }
 
   /**
-   * Start timestamp update
-   */
-  private startTimestampUpdate(): void {
-    const sessionTimer = document.getElementById('session-timer');
-    const updateTime = () => {
-      // Session timer (mm:ss from session start)
-      if (sessionTimer && this.sessionStartTime > 0) {
-        const elapsed = Math.floor((Date.now() - this.sessionStartTime) / 1000);
-        const mins = String(Math.floor(elapsed / 60)).padStart(2, '0');
-        const secs = String(elapsed % 60).padStart(2, '0');
-        const timeStr = `${mins}:${secs}`;
-        sessionTimer.textContent = timeStr;
-        // Sync to dashboard stats duration
-        const mcDuration = document.getElementById('mc-stat-duration');
-        if (mcDuration) mcDuration.textContent = timeStr;
-      }
-      // Legacy timestamp element
-      if (this.timestampElement) {
-        const now = new Date();
-        const timeStr = now.toLocaleTimeString('en-US', { hour12: false });
-        this.timestampElement.textContent = `TIME: ${timeStr}`;
-      }
-    };
-
-    updateTime();
-    setInterval(updateTime, 1000);
-  }
-
-  /**
    * Update mission control stats bar values
    */
   private updateMcStats(): void {
@@ -1332,18 +1304,6 @@ class VoiceScannerApp {
     if (orbEl) {
       orbEl.classList.remove('idle', 'listening', 'thinking', 'speaking');
       orbEl.classList.add(state);
-    }
-
-    // Update agent status text
-    const agentStatus = document.getElementById('agent-status');
-    if (agentStatus) {
-      const statusTexts: Record<VoiceState, string> = {
-        'idle': 'Ready',
-        'listening': 'Listening...',
-        'thinking': 'Thinking...',
-        'speaking': 'Speaking...'
-      };
-      agentStatus.textContent = statusTexts[state];
     }
 
     // Legacy scanner frame updates (hidden but kept for compatibility)
@@ -2329,6 +2289,18 @@ class VoiceScannerApp {
    * Handle live agent transfer: update UI to show the new active agent
    */
   private handleAgentTransfer(data: { agent_id: string; name: string; role: string; avatar: string }): void {
+    // The backend has already queued the matching TTS voice update. Hold the
+    // visual identity until that voice actually starts producing audio so the
+    // face and voice change on the same user-visible boundary.
+    this.pendingAgentTransfer = {
+      data,
+      stagedAt: performance.now(),
+      waitForPreviousSpeech: this.botIsSpeaking,
+    };
+    this.log(`Agent transfer staged: ${data.name} (${data.role})`);
+  }
+
+  private applyAgentTransfer(data: { agent_id: string; name: string; role: string; avatar: string }): void {
     this.log(`Agent transfer: ${data.name} (${data.role})`);
     this.addTerminalMessage(`agent.transfer('${data.agent_id}');`, 'command');
     this.addTerminalMessage(`Connected to ${data.name} - ${data.role}`, 'regular');
@@ -2354,47 +2326,15 @@ class VoiceScannerApp {
       this.liquidBlob.style.background = `linear-gradient(135deg, ${color} 0%, #2563eb 50%, #ffffff 100%)`;
     }
 
-    // Update agent identity elements on the talking page
-    const agentName = document.getElementById('agent-name');
+    // Keep the portrait synchronized without placing identity text over the demo.
     const agentAvatar = document.getElementById('agent-avatar-img') as HTMLImageElement | null;
-    const agentStatus = document.getElementById('agent-status');
-    if (agentName) agentName.textContent = data.name;
     if (agentAvatar && data.avatar) agentAvatar.src = data.avatar;
-    if (agentStatus) agentStatus.textContent = data.role;
-
-    // Sync Mission Control header
-    const mcName = document.getElementById('mc-agent-name');
-    if (mcName) mcName.textContent = data.name;
 
     // Tint MC mini orb with agent color
     const mcOrbGlow = document.querySelector('.mc-orb-glow') as HTMLElement | null;
     if (mcOrbGlow) mcOrbGlow.style.background = `linear-gradient(135deg, ${color}, #7c3aed)`;
     const mcOrbCore = document.querySelector('.mc-orb-core') as HTMLElement | null;
     if (mcOrbCore) mcOrbCore.style.background = `linear-gradient(135deg, ${color}, #818cf8)`;
-
-    // Update the agent indicator badge
-    let indicator = document.getElementById('active-agent-indicator');
-    if (!indicator) {
-      indicator = document.createElement('div');
-      indicator.id = 'active-agent-indicator';
-      indicator.style.cssText = `
-        position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
-        padding: 6px 18px; border-radius: 20px; font-size: 13px; font-weight: 600;
-        letter-spacing: 0.5px; z-index: 1000; transition: all 0.4s ease;
-        backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1);
-        animation: agentTransferIn 0.5s ease;
-      `;
-      document.body.appendChild(indicator);
-    }
-    indicator.style.background = `${color}22`;
-    indicator.style.color = color;
-    indicator.style.borderColor = `${color}44`;
-    indicator.textContent = `${data.name} - ${data.role}`;
-
-    // Flash the indicator to draw attention
-    indicator.style.animation = 'none';
-    void indicator.offsetHeight; // force reflow
-    indicator.style.animation = 'agentTransferIn 0.5s ease';
 
     // Show a notification
     this.showNotification(`TRANSFERRED TO ${data.name.toUpperCase()}`);
@@ -3207,6 +3147,28 @@ class VoiceScannerApp {
     // Bot speech events
     this.rtviClient.on(RTVIEvent.BotStartedSpeaking, () => {
       this.log('Bot started speaking');
+      if (this.pendingAgentTransfer) {
+        const pending = this.pendingAgentTransfer;
+        const startedInsideGuard =
+          pending.stagedAt > 0 &&
+          performance.now() - pending.stagedAt < VoiceScannerApp.AGENT_TRANSFER_GUARD_MS;
+
+        if (pending.waitForPreviousSpeech || startedInsideGuard) {
+          // This speech belongs to the outgoing agent. Keep the incoming
+          // identity staged until this utterance stops and the next one starts.
+          pending.waitForPreviousSpeech = true;
+          this.log(`Waiting for previous agent speech before showing ${pending.data.name}`);
+        } else {
+          this.pendingAgentTransfer = null;
+          const transfer = pending.data;
+          // BotStartedSpeaking is emitted when audio enters playback. A tiny
+          // delay aligns the visual swap with audible output buffering.
+          this.agentTransferSyncTimer = setTimeout(() => {
+            this.agentTransferSyncTimer = null;
+            this.applyAgentTransfer(transfer);
+          }, VoiceScannerApp.AGENT_TRANSFER_AUDIO_DELAY_MS);
+        }
+      }
       // Note: Bot audio visualization uses simulated data since RTVI doesn't expose bot audio track
       this.botIsSpeaking = true;
       if (this.subtitleClearTimeout) {
@@ -3227,6 +3189,11 @@ class VoiceScannerApp {
     this.rtviClient.on(RTVIEvent.BotStoppedSpeaking, () => {
       this.log('Bot stopped speaking');
       this.botIsSpeaking = false;
+      if (this.pendingAgentTransfer?.waitForPreviousSpeech) {
+        this.pendingAgentTransfer.waitForPreviousSpeech = false;
+        this.pendingAgentTransfer.stagedAt = 0;
+        this.log(`Previous agent finished; ${this.pendingAgentTransfer.data.name} is ready`);
+      }
       // If subtitle display timers are still running, don't hide yet —
       // schedule hide after remaining timers would have completed.
       // Use a generous delay to ensure all PTS-timed words have been shown.
@@ -3279,30 +3246,30 @@ class VoiceScannerApp {
    * Get backend URL
    */
   private getBackendUrl(): string {
+    if ((window as any).__BACKEND_URL__) {
+      return (window as any).__BACKEND_URL__;
+    }
     // @ts-ignore
     if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) {
       // @ts-ignore
       return import.meta.env.VITE_BACKEND_URL;
     }
-    if ((window as any).__BACKEND_URL__) {
-      return (window as any).__BACKEND_URL__;
-    }
-    return 'http://localhost:7860';
+    return window.location.origin;
   }
 
   /**
    * Get LightRAG URL for knowledge graph queries
    */
   private getLightRAGUrl(): string {
+    if ((window as any).__LIGHTRAG_URL__ || (window as any).LIGHTRAG_URL) {
+      return (window as any).__LIGHTRAG_URL__ || (window as any).LIGHTRAG_URL;
+    }
     // @ts-ignore
     if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_LIGHTRAG_URL) {
       // @ts-ignore
       return import.meta.env.VITE_LIGHTRAG_URL;
     }
-    if ((window as any).__LIGHTRAG_URL__) {
-      return (window as any).__LIGHTRAG_URL__;
-    }
-    return 'http://localhost:9621';
+    return window.location.origin;
   }
 
   /**

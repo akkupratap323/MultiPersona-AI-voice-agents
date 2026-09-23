@@ -19,6 +19,7 @@ Model: multi-qa-MiniLM-L6-cos-v1
 - Inference: ~50ms per query
 """
 
+import os
 from typing import Dict, Tuple, Optional
 from loguru import logger
 
@@ -293,6 +294,10 @@ def get_semantic_selector() -> Optional[SemanticTemplateSelector]:
 
 def is_semantic_available() -> bool:
     """Check if semantic selector can be initialized."""
+    if os.getenv("SEMANTIC_SELECTION_ENABLED", "false").strip().lower() not in {
+        "1", "true", "yes", "on"
+    }:
+        return False
     try:
         _load_sentence_transformers()
         return True

@@ -1,0 +1,17 @@
+{$PERSONA_DOMAIN} {
+    encode zstd gzip
+
+    @backend path /health* /connect* /status* /personas /vad-mode* /a2ui/* /graph/* /docs* /openapi.json /ws*
+    reverse_proxy @backend backend:7860 {
+        flush_interval -1
+    }
+
+    reverse_proxy frontend:80
+
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        Referrer-Policy strict-origin-when-cross-origin
+        -Server
+    }
+}

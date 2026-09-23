@@ -79,27 +79,11 @@ async def lifespan(app: FastAPI):
             else:
                 logger.info(f"🔊 AIC Speech Enhancement: DISABLED")
 
-            # SmartTurn v3 status - ML-based end-of-turn detection
-            server_config = config.get("server", {})
-            smart_turn_config = server_config.get("smart_turn", {})
-            if smart_turn_config.get("enabled", False):
-                cpu_count = smart_turn_config.get("cpu_count", 1)
-                timeout = smart_turn_config.get("timeout", 0.5)
-                logger.info(f"🧠 SmartTurn v3 End-of-Turn Detection: ENABLED")
-                logger.info(f"   ├─ ONNX model: LocalSmartTurnAnalyzerV3")
-                logger.info(f"   ├─ CPU threads: {cpu_count}")
-                logger.info(f"   ├─ Turn timeout: {timeout}s")
-                logger.info(f"   └─ Integration: Transport-level turn_analyzer (pipecat 0.0.98)")
-
-                # Check if SmartTurn v3 module is available
-                try:
-                    from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
-                    logger.info(f"   ✅ SmartTurn v3 module loaded successfully")
-                except ImportError as e:
-                    logger.warning(f"   ⚠️ SmartTurn v3 module not available: {e}")
-                    logger.warning(f"   💡 Run: pip install 'pipecat-ai[local-smart-turn-v3]'")
-            else:
-                logger.info(f"🧠 SmartTurn v3: DISABLED (using transcription-based detection)")
+            stt_config = config.get("stt", {}).get("config", {})
+            logger.info("Deepgram Flux native turn detection: ENABLED")
+            logger.info(f"   Model: {stt_config.get('model', 'flux-general-en')}")
+            logger.info(f"   EOT threshold: {stt_config.get('eot_threshold', 0.7)}")
+            logger.info(f"   EOT timeout: {stt_config.get('eot_timeout_ms', 5000)}ms")
 
             logger.info("=" * 60)
 

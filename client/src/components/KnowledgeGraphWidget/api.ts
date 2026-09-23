@@ -8,7 +8,7 @@ import { KnowledgeGraph } from './types';
 // LightRAG server URL - can be configured via environment variable or window global
 const LIGHTRAG_URL = (window as any).__LIGHTRAG_URL__ ||
                      (window as any).LIGHTRAG_URL ||
-                     'http://localhost:9621';
+                     window.location.origin;
 
 
 // LightRAG API key for authentication

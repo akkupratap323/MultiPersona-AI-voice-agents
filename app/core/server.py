@@ -10,8 +10,6 @@ import os
 from typing import Any, Dict
 
 from loguru import logger
-from pipecat.audio.vad.silero import SileroVADAnalyzer
-from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
 from pipecat.transports.websocket.server import (
     WebsocketServerParams,
@@ -79,19 +77,7 @@ class VoiceAssistantServer:
         audio_out_enabled = self.server_config.get("audio_out_enabled", True)
         add_wav_header = self.server_config.get("add_wav_header", False)
 
-        # Create VAD analyzer with noise-resistant settings
-        vad_config = self.server_config.get("vad", {})
-        vad_params = VADParams(
-            confidence=vad_config.get("confidence", 0.85),
-            start_secs=vad_config.get("start_secs", 0.3),
-            stop_secs=vad_config.get("stop_secs", 0.6),
-            min_volume=vad_config.get("min_volume", 0.75),
-        )
-        vad_analyzer = SileroVADAnalyzer(params=vad_params)
-        logger.info(
-            f"VAD configured: confidence={vad_params.confidence}, "
-            f"min_volume={vad_params.min_volume}, start_secs={vad_params.start_secs}"
-        )
+        logger.info("Local VAD disabled; Deepgram Flux manages turn detection")
 
         # Create transport parameters
         # Note: host and port must be passed directly to WebsocketServerTransport
@@ -106,7 +92,6 @@ class VoiceAssistantServer:
             audio_out_enabled=audio_out_enabled,
             audio_out_sample_rate=audio_out_sample_rate,
             add_wav_header=add_wav_header,
-            vad_analyzer=vad_analyzer,
             session_timeout=session_timeout,
         )
 

@@ -1,0 +1,71 @@
+services:
+  backend:
+    build:
+      context: ../..
+      dockerfile: deployment/docker/Dockerfile
+    container_name: persona-backend
+    restart: unless-stopped
+    env_file:
+      - ../../.env
+    environment:
+      EMOTION_DETECTION_ENABLED: "false"
+      SEMANTIC_SELECTION_ENABLED: "false"
+      FASTAPI_HOST: 0.0.0.0
+      FASTAPI_PORT: 7860
+    expose:
+      - "7860"
+    mem_limit: 950m
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:7860/health"]
+      interval: 20s
+      timeout: 8s
+      retries: 6
+      start_period: 35s
+    networks: [persona]
+
+  frontend:
+    build:
+      context: ../../client
+      dockerfile: Dockerfile
+    container_name: persona-frontend
+    restart: unless-stopped
+    environment:
+      BACKEND_URL: ""
+    expose:
+      - "80"
+    mem_limit: 160m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost/"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    networks: [persona]
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: persona-caddy
+    restart: unless-stopped
+    environment:
+      PERSONA_DOMAIN: ${PERSONA_DOMAIN}
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    mem_limit: 128m
+    networks: [persona]
+
+networks:
+  persona:
+
+volumes:
+  caddy_data:
+  caddy_config:

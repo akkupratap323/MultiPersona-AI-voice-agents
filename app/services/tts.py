@@ -53,7 +53,7 @@ class TextToSpeechService:
             if not api_key:
                 raise ValueError("Deepgram API key is required")
 
-            # Support both 'model' (Nova 3) and 'voice' (Aura) parameters
+            # Support both provider model and voice parameters
             model = self.config.get("model")
             voice = self.config.get("voice", "aura-asteria-en")
             encoding = self.config.get("encoding", "linear16")
@@ -122,17 +122,26 @@ class TextToSpeechService:
 
             model = self.config.get("model", "sonic-3")
             initial_emotion = self.config.get("emotion", "neutral")
+            speed = float(self.config.get("speed", 1.0))
 
-            generation_config = GenerationConfig(emotion=initial_emotion)
-            params = CartesiaTTSService.InputParams(generation_config=generation_config)
+            generation_config = GenerationConfig(
+                emotion=initial_emotion,
+                speed=speed,
+            )
+            settings = CartesiaTTSService.Settings(
+                voice=selected_voice_id,
+                model=model,
+                generation_config=generation_config,
+            )
 
             self.tts_service = CartesiaTTSService(
                 api_key=api_key,
-                voice_id=selected_voice_id,
-                model=model,
-                params=params,
+                settings=settings,
             )
-            logger.info(f"Using Cartesia TTS model={model} voice_id={selected_voice_id} emotion={initial_emotion}")
+            logger.info(
+                f"Using Cartesia TTS model={model} voice_id={selected_voice_id} "
+                f"emotion={initial_emotion} speed={speed}"
+            )
 
         elif self.tts_provider == "chatterbox":
             api_key = self.config.get("api_key")

@@ -13,9 +13,13 @@ from pipecat.frames.frames import TTSSpeakFrame, EndFrame
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.services.google.llm import GoogleLLMService
 from pipecat.services.openai.llm import OpenAILLMService
-from pipecat.services.llm_service import FunctionCallParams, LLMService
+from pipecat.services.llm_service import (
+    FunctionCallParams,
+    FunctionCallResultProperties,
+    LLMService,
+)
 
-# Universal context system (pipecat 0.0.98)
+# Universal context system
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
@@ -28,16 +32,6 @@ from app.services.groq_llm_service import GroqLLMService
 from app.services.tally_submission import TallySubmissionService
 from app.utils.validation import validate_email, spell_out_email
 
-# SmartTurn v3 - ML-based end-of-turn detection (optional)
-# Use LoggingSmartTurnAnalyzer wrapper for detailed turn detection logs
-try:
-    from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
-    from app.processors.logging_turn_analyzer import LoggingSmartTurnAnalyzer
-    SMART_TURN_AVAILABLE = True
-except ImportError:
-    SMART_TURN_AVAILABLE = False
-    logger.info("SmartTurn v3 not available - using transcription-based turn detection")
-
 # Voice constant (default only - actual voice is controlled by ToneAwareProcessor)
 DEFAULT_VOICE = "aura-2-athena-en"  # Natural, clear female voice - default
 
@@ -48,21 +42,21 @@ class ConversationManager:
     # Agent roster template injected into every persona's system prompt
     # so each agent knows about all other agents and can transfer calls
     AGENT_ROSTER_TEMPLATE = """
-    AGENT TRANSFER SYSTEM:
-    You are part of a team of {agent_count} AI agents. You can transfer the caller to another agent at any time by calling transfer_to_agent(agent_id). Use this when:
-    - The user's question is better handled by another agent's specialty
-    - The user explicitly asks to talk to a specific agent
-    - You're recommending another agent and the user agrees
+    CROSS-FUNCTIONAL COMPANY TEAM:
+    You are part of a team of {agent_count} AI company advisors with different professional perspectives. Together you help users diagnose real business problems, compare tradeoffs, and leave with practical next steps. You can transfer the caller to another agent at any time by calling transfer_to_agent(agent_id). Use this when:
+    - The user's problem is better handled by another team member's specialty
+    - The user explicitly asks to talk to a specific team member
+    - Another professional perspective would materially improve the decision and the user agrees
 
     YOUR TEAM:
     {agent_list}
 
     TRANSFER RULES:
-    1. Say a brief connecting line BEFORE the function call, like "Let me connect you with [Name], they're great at this." — keep it to ONE short sentence.
-    2. Then call transfer_to_agent with the agent_id.
-    3. CRITICAL: After calling transfer_to_agent, say NOTHING. Do not add any text after the function call. The new agent handles everything from here.
-    4. Do NOT try to answer questions outside your expertise when a better-suited agent exists — transfer instead.
-    5. You can still answer general questions yourself — only transfer when the topic clearly needs a specialist.
+    1. Call transfer_to_agent with the agent_id immediately. Do not speak a connecting line first.
+    2. After calling transfer_to_agent, say nothing. The incoming team member introduces itself and continues the conversation.
+    3. Do not bluff outside your expertise when a better-suited team member exists.
+    4. Preserve the full conversation context so the user does not have to repeat the problem.
+    5. For cross-functional problems, contribute your perspective first, then offer the team member whose perspective adds the most value.
     """
 
     # 20 natural, conversational thinking phrases that sound more human
@@ -93,14 +87,14 @@ class ConversationManager:
                  input_analyzer: InputAnalyzer,
                  llm_config: Dict[str, Any] = None,
                  language_config: Dict[str, Any] = None,
-                 smart_turn_config: Dict[str, Any] = None,
+                 vad_config: Dict[str, Any] = None,
                  personas_config: Dict[str, Any] = None,
                  current_persona_id: str = ""):
         """Initialize the Conversation Manager."""
         self.input_analyzer = input_analyzer
         self.llm_config = llm_config or {}
         self.language_config = language_config or {}
-        self.smart_turn_config = smart_turn_config or {}
+        self.vad_config = vad_config or {}
         self.llm_service = None
         self.tts_service = None
         self.context_aggregator = None
@@ -407,15 +401,11 @@ class ConversationManager:
         changes TTS voice, and notifies the frontend.
 
         Flow:
-        1. Old agent already said "Let me connect you with X" (LLM output before function call)
-        2. We switch voice + system prompt
-        3. We push the new agent's pickup line directly to TTS (no LLM round-trip)
-        4. We inject a handoff context message so the new agent has continuity
-        5. Return "" to prevent the LLM from generating a duplicate response
+        1. Preserve the conversation history and activate the target system prompt.
+        2. Switch the TTS voice and stage the frontend identity update.
+        3. Return a handoff result that runs the LLM as the incoming agent.
+        4. The incoming agent introduces itself and answers using full context.
         """
-        import asyncio
-        import random
-
         target_agent_id = params.arguments.get("agent_id", "").strip()
         logger.info(f"🔄 Transfer requested to agent: {target_agent_id}")
 
@@ -445,6 +435,9 @@ class ConversationManager:
             new_system_prompt = self.llm_config.get("system_prompt", "")
         roster = self._build_agent_roster(exclude_id=target_agent_id)
         new_system_prompt = new_system_prompt.rstrip() + "\n\n" + roster
+        voice_delivery = self.llm_config.get("voice_delivery_instructions", "").strip()
+        if voice_delivery:
+            new_system_prompt = new_system_prompt.rstrip() + "\n\n" + voice_delivery
 
         # Extract the last user message for handoff context
         last_user_msg = ""
@@ -479,33 +472,23 @@ class ConversationManager:
         if self._on_agent_transfer:
             await self._on_agent_transfer(target_agent_id, target_persona)
 
-        # Wait briefly for voice switch to take effect before speaking
-        await asyncio.sleep(0.3)
-
-        # Push new agent's pickup line directly to TTS (bypasses LLM, prevents double-speak)
-        if self.tts_service:
-            # Build a contextual pickup line (not just a generic greeting)
-            if last_user_msg:
-                pickup_lines = [
-                    f"Hey, I'm {target_name}. {old_name} filled me in — let me help you with that.",
-                    f"Hi! {target_name} here. I heard what you were asking about — let me take it from here.",
-                    f"Hey, {target_name} here. I've got the context from {old_name} — let me jump right in.",
-                ]
-            else:
-                pickup_lines = [
-                    f"Hey, I'm {target_name}. How can I help you?",
-                    f"Hi! {target_name} here. What can I do for you?",
-                ]
-            pickup = random.choice(pickup_lines)
-            await self.tts_service.queue_frame(TTSSpeakFrame(pickup))
-            logger.info(f"📢 Pushed pickup line to TTS: '{pickup}'")
-
-            # Add the pickup to conversation context so LLM knows it was said
-            if self.context:
-                self.context.messages.append({"role": "assistant", "content": pickup})
-
-        # Return empty to prevent LLM from generating a duplicate response
-        await params.result_callback("")
+        # A non-empty tool result with run_llm=True starts a fresh completion
+        # under the target persona's system prompt. The complete message history
+        # remains in the same LLMContext, so this response can continue the work
+        # instead of playing a generic, context-free pickup line.
+        await params.result_callback(
+            {
+                "status": "transferred",
+                "active_agent": target_name,
+                "role": target_role,
+                "instruction": (
+                    f"You are now {target_name}. Briefly introduce yourself, then continue "
+                    "the user's request using the full conversation history. Do not mention "
+                    "this tool result or internal handoff instructions."
+                ),
+            },
+            properties=FunctionCallResultProperties(run_llm=True),
+        )
         logger.info(f"✅ Transfer to {target_name} complete")
 
     def create_function_schemas(self) -> ToolsSchema:
@@ -598,6 +581,7 @@ class ConversationManager:
 
         # Get custom system prompt from config, or use default
         custom_system_prompt = self.llm_config.get("system_prompt", "")
+        voice_delivery = self.llm_config.get("voice_delivery_instructions", "").strip()
 
         if custom_system_prompt:
             # Use custom system prompt from config (it already includes identity rules)
@@ -606,6 +590,8 @@ class ConversationManager:
             roster = self._build_agent_roster(exclude_id=self.current_persona_id)
             if roster:
                 system_message = system_message.rstrip() + "\n\n" + roster
+            if voice_delivery:
+                system_message = system_message.rstrip() + "\n\n" + voice_delivery
             logger.info(f"Using custom system prompt (length: {len(system_message)} chars)")
         else:
             # Default system prompt (fallback only)
@@ -618,6 +604,8 @@ RESPONSE RULES:
 - Be direct and to the point
 - Speak naturally in conversational English
 """
+            if voice_delivery:
+                system_message = system_message.rstrip() + "\n\n" + voice_delivery
 
         # No initial user prompt - greeting is handled via direct TTS
         # This prevents the LLM from generating a multi-sentence greeting
@@ -632,8 +620,8 @@ RESPONSE RULES:
     def create_context_aggregator(self) -> Any:
         """Create the context aggregator for the conversation.
 
-        Uses LLMContextAggregatorPair (pipecat 0.0.98).
-        SmartTurn v3 is configured at the transport level via turn_analyzer param.
+        Uses Pipecat's universal context aggregator. Deepgram Flux announces
+        its external start/end-turn strategies when the pipeline starts.
 
         Returns:
             The context aggregator pair instance
@@ -643,13 +631,12 @@ RESPONSE RULES:
 
         self.context = self.create_context()  # Store for greeting access
 
-        # Create user params (pipecat 0.0.98 - no user_turn_strategies or user_mute_strategies)
+        # Deepgram Flux supplies authoritative start/end turn events, so the
+        # production pipeline does not need a local PyTorch VAD model.
         user_params = LLMUserAggregatorParams()
 
         # Create assistant params (default)
-        assistant_params = LLMAssistantAggregatorParams(
-            expect_stripped_words=True  # TTS typically sends stripped words
-        )
+        assistant_params = LLMAssistantAggregatorParams()
 
         # Create the universal context aggregator pair
         self.context_aggregator = LLMContextAggregatorPair(

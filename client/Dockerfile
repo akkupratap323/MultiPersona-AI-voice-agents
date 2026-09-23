@@ -19,7 +19,7 @@ ARG CACHEBUST=1
 COPY . .
 
 # Build argument for backend URL (will be replaced at runtime via nginx)
-ARG VITE_BACKEND_URL=http://localhost:7860
+ARG VITE_BACKEND_URL=
 ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 
 # Build the application
@@ -36,7 +36,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 
 # Copy entrypoint script for runtime environment variable injection
 COPY docker-entrypoint.sh /docker-entrypoint.sh
-RUN chmod +x /docker-entrypoint.sh
+RUN sed -i 's/\r$//' /docker-entrypoint.sh && chmod +x /docker-entrypoint.sh
 
 # Expose port 80
 EXPOSE 80
