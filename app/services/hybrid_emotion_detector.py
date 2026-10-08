@@ -3,13 +3,14 @@ Hybrid Emotion Detector - Combines Audio + Text Sentiment Analysis.
 
 This module implements a sophisticated emotion detection system that fuses:
 1. Audio emotion from MSP-PODCAST wav2vec2 (70% weight)
-2. Text sentiment from Google Gemini LLM (30% weight)
+2. Text sentiment from a Groq-hosted LLM (30% weight)
+
+When no text judgement is available (no transcript, no Groq key, or an API
+error) the audio result is used alone rather than fused with a placeholder.
 
 Features:
-- Dynamic weight adjustment based on confidence scores
 - Emotion mismatch detection (sarcasm, politeness masking)
 - Dimensional emotion fusion (arousal, valence, dominance)
-- Fast LLM inference via Google Gemini Flash
 """
 
 import math
@@ -35,7 +36,7 @@ class HybridEmotionDetector:
 
         Args:
             audio_detector: Audio emotion detector (MSP or SpeechBrain)
-            llm_api_key: Google AI API key for Gemini text sentiment
+            llm_api_key: Groq API key for LLM text sentiment
             default_audio_weight: Default weight for audio emotion (0-1)
             default_text_weight: Default weight for text sentiment (0-1)
             min_confidence: Minimum confidence threshold
@@ -113,11 +114,20 @@ class HybridEmotionDetector:
             logger.debug(f"📝 Empty/invalid transcript, using neutral: '{transcript}'")
             text_result = self._neutral_text_result()
 
-        # Calculate dynamic weights based on confidence
-        audio_weight, text_weight = self._calculate_dynamic_weights(
-            audio_result.get("confidence", 0.5),
-            text_result.get("confidence", 0.5)
-        )
+        text_available = text_result.get("available", True)
+        if text_available:
+            audio_weight, text_weight = self._calculate_dynamic_weights(
+                audio_result.get("confidence", 0.5),
+                text_result.get("confidence", 0.5)
+            )
+        else:
+            # No real text judgement: fusing its neutral placeholder would pull
+            # every emotion 30% toward the middle (e.g. angry -> anxious).
+            logger.warning(
+                f"Text sentiment unavailable ({text_result.get('reason', 'no reason')}); "
+                f"using audio emotion alone"
+            )
+            audio_weight, text_weight = 1.0, 0.0
 
         # Fuse dimensional scores (arousal, valence, dominance)
         fused_scores = self._fuse_scores(
@@ -182,6 +192,8 @@ class HybridEmotionDetector:
                 "audio_percentage": int(audio_weight * 100),
                 "text_percentage": int(text_weight * 100)
             },
+
+            "text_available": text_available,
 
             # Mismatch detection
             "mismatch_detected": mismatch_info["has_mismatch"],
@@ -419,13 +431,15 @@ class HybridEmotionDetector:
         }
 
     def _neutral_text_result(self) -> Dict:
-        """Return neutral text sentiment result."""
+        """Placeholder when there is no text to judge (excluded from fusion)."""
         return {
             "emotion": "neutral",
             "arousal": 0.5,
             "valence": 0.5,
             "dominance": 0.5,
-            "confidence": 0.5
+            "confidence": 0.0,
+            "available": False,
+            "reason": "No transcript or no LLM detector"
         }
 
     def get_status(self) -> Dict:

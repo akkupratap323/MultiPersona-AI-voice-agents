@@ -14,6 +14,11 @@ from loguru import logger
 import httpx
 
 
+# llama-3.1-8b-instant was retired by Groq; this model answers the same
+# one-word prompt within max_tokens=5. Override with GROQ_SENTIMENT_MODEL.
+DEFAULT_MODEL = "qwen/qwen3.8-27b"
+
+
 class LLMTextSentiment:
     """Contextual text sentiment detector using Groq."""
 
@@ -42,16 +47,16 @@ class LLMTextSentiment:
     def __init__(
         self,
         api_key: str,
-        model: str = "llama-3.1-8b-instant",
+        model: Optional[str] = None,
     ):
         """Initialize the LLM sentiment detector.
 
         Args:
             api_key: Groq API key
-            model: Groq model name
+            model: Groq model name (default: GROQ_SENTIMENT_MODEL env var, then DEFAULT_MODEL)
         """
         self.api_key = api_key
-        self.model = model
+        self.model = model or os.getenv("GROQ_SENTIMENT_MODEL") or DEFAULT_MODEL
         self._client = httpx.Client(
             headers={
                 "Authorization": f"Bearer {api_key}",
@@ -59,7 +64,7 @@ class LLMTextSentiment:
             },
             timeout=3.0,  # Tight timeout — text sentiment is best-effort, never blocks pipeline
         )
-        logger.info(f"LLM Text Sentiment initialized (model: {model}, provider: Groq)")
+        logger.info(f"LLM Text Sentiment initialized (model: {self.model}, provider: Groq)")
 
     def detect_emotion(self, text: str) -> Dict:
         """Detect emotion from text using Groq LLM.
@@ -69,9 +74,11 @@ class LLMTextSentiment:
 
         Returns:
             Dictionary with emotion, confidence, arousal, valence, etc.
+            ``available`` is False when no text judgement could be made
+            (empty text or an API error); callers must not treat that as neutral.
         """
         if not text or not text.strip():
-            return self._neutral_result("Empty text")
+            return self._unavailable_result("Empty text")
 
         try:
             resp = self._client.post(
@@ -114,25 +121,32 @@ class LLMTextSentiment:
                 "dominance": 0.5,
                 "raw_response": raw_response,
                 "method": "llm",
+                "available": True,
                 "tokens_used": tokens_used,
                 "latency_ms": 0,
             }
 
         except Exception as e:
-            logger.error(f"LLM emotion detection failed: {e}")
-            return self._neutral_result(f"Error: {str(e)}")
+            logger.error(f"LLM emotion detection failed (model {self.model}): {e}")
+            return self._unavailable_result(f"Error: {str(e)}")
 
-    def _neutral_result(self, reason: str) -> Dict:
-        """Return neutral emotion result."""
+    def _unavailable_result(self, reason: str) -> Dict:
+        """Result for when the text could not be judged.
+
+        Neutral-shaped for display, but ``available=False`` and zero confidence
+        so the hybrid detector falls back to audio instead of fusing a fake
+        "neutral" that drags every emotion toward the middle.
+        """
         return {
             "emotion": "neutral",
             "raw_emotion": "neutral",
-            "confidence": 1.0,
+            "confidence": 0.0,
             "arousal": 0.5,
             "valence": 0.5,
             "dominance": 0.5,
-            "raw_response": "neutral",
-            "method": "llm_fallback",
+            "raw_response": "",
+            "method": "llm_unavailable",
+            "available": False,
             "tokens_used": 0,
             "reason": reason
         }

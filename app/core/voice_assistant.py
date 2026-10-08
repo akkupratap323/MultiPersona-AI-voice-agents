@@ -10,6 +10,7 @@ and manages the overall voice assistant functionality including:
 """
 
 import asyncio
+import os
 from typing import Any, Dict, List
 
 from loguru import logger
@@ -80,16 +81,16 @@ class VoiceAssistant:
         self.latency_analyzer = LatencyAnalyzer()
 
         # Tone-aware processor for dynamic voice selection using MSP-PODCAST + LLM text sentiment
-        # Uses Google API key for Gemini-based text sentiment detection
+        # Text sentiment calls Groq, so it needs GROQ_API_KEY, not the conversation LLM's key
         # Can be disabled via config for performance testing (wav2vec2 is CPU-intensive)
-        google_api_key = self.config.get("conversation", {}).get("llm", {}).get("api_key")
+        groq_api_key = os.getenv("GROQ_API_KEY", "").strip() or None
         server_config = self.config.get("server", {})
         emotion_enabled = server_config.get("emotion_detection_enabled", True)
         tts_config = self.config.get("tts", {}).get("config", {})
         dynamic_tts_emotion = tts_config.get("dynamic_emotion", True)
         logger.info(
             f"[EMOTION-DIAG] Emotion detection config: enabled={emotion_enabled}, "
-            f"groq_api_key={'SET' if google_api_key and not google_api_key.startswith('$') else 'MISSING'}"
+            f"groq_api_key={'SET' if groq_api_key else 'MISSING (audio-only emotion)'}"
         )
         self.tone_processor = None
         if emotion_enabled:
@@ -101,7 +102,7 @@ class VoiceAssistant:
                 cooldown_seconds=3.0,
                 enabled=True,
                 tts_emotion_enabled=dynamic_tts_emotion,
-                groq_api_key=google_api_key,
+                groq_api_key=groq_api_key,
             )
         else:
             logger.info("Emotion detection disabled; skipping MSP-PODCAST and PyTorch")
