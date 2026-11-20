@@ -79,8 +79,15 @@ class TallySubmissionService:
 
             response.raise_for_status()
 
-            data = response.json()
-            logger.info(f"Tally.so submission successful: submissionId={data.get('submissionId')} for {email}")
+            # The 2xx status is the success signal. The body is only read for the log line,
+            # so a reply that isn't a JSON object must not turn a stored booking into an error
+            # (the caller would ask the user to try again and the booking would go in twice).
+            try:
+                data = response.json()
+            except ValueError:
+                data = None
+            submission_id = data.get("submissionId") if isinstance(data, dict) else None
+            logger.info(f"Tally.so submission successful: submissionId={submission_id} for {email}")
 
             return {
                 "success": True,
