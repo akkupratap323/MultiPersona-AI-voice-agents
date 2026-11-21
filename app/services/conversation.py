@@ -36,6 +36,15 @@ from app.utils.validation import validate_email, spell_out_email
 DEFAULT_VOICE = "aura-2-athena-en"  # Natural, clear female voice - default
 
 
+def _text_argument(arguments: Any, name: str) -> str:
+    """A text argument of a function call, stripped; "" when it is missing, null or not text.
+
+    Models sometimes send null (or a number) for a field the caller has not given yet.
+    """
+    value = arguments.get(name) if isinstance(arguments, dict) else None
+    return value.strip() if isinstance(value, str) else ""
+
+
 class ConversationManager:
     """Service responsible for managing conversation flow and LLM interactions."""
 
@@ -299,9 +308,9 @@ class ConversationManager:
         logger.info("📋 Submit appointment function called")
 
         # Extract parameters
-        first_name = params.arguments.get("first_name", "").strip()
-        last_name = params.arguments.get("last_name", "").strip()
-        email = params.arguments.get("email", "").strip()
+        first_name = _text_argument(params.arguments, "first_name")
+        last_name = _text_argument(params.arguments, "last_name")
+        email = _text_argument(params.arguments, "email")
 
         logger.info(f"Appointment details: {first_name} {last_name} ({email})")
 
@@ -406,7 +415,7 @@ class ConversationManager:
         3. Return a handoff result that runs the LLM as the incoming agent.
         4. The incoming agent introduces itself and answers using full context.
         """
-        target_agent_id = params.arguments.get("agent_id", "").strip()
+        target_agent_id = _text_argument(params.arguments, "agent_id")
         logger.info(f"🔄 Transfer requested to agent: {target_agent_id}")
 
         agents = self.personas_config.get("agents", {})
